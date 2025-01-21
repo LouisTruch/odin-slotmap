@@ -42,6 +42,16 @@ fixed_slot_map_init :: proc "contextless" (m: ^FixedSlotMap($N, $T, $HT/Handle))
 	m.erase = -1
 }
 
+fixed_slot_map_clear :: proc "contextless" (m: ^FixedSlotMap($N, $T, $HT/Handle)) {
+	m.size = 0
+	for &handle, i in m.handles {
+		handle.idx = i + 1
+		handle.gen = 1
+	}
+	m.erase = -1
+	m.data = 0
+}
+
 // Get a slot in the SlotMap 
 @(require_results)
 fixed_slot_map_new_handle :: proc "contextless" (
@@ -148,6 +158,41 @@ fixed_slot_map_delete_handle :: proc "contextless" (
 	return true
 }
 
+// TODO
+// ! Old data location is not cleared/zeroed
+// fixed_slot_map_delete_handle_value :: proc "contextless" (
+// 	m: ^FixedSlotMap($N, $T, $HT/Handle),
+// 	handle: HT,
+// ) -> (
+// 	T,
+// 	bool,
+// ) {
+// 	if !fixed_slot_map_is_valid(m, handle) {
+// 		return false
+// 	}
+// 	m.size -= 1
+
+// 	// Retrieve the handle from the array with the handle passed by the user
+// 	handle_from_array := &m.handles[handle.idx]
+
+// 	// Copy the last used data slot to the newly freed one
+// 	m.data[handle_from_array.idx] = m.data[m.size]
+// 	// Same for the erase array
+// 	m.erase[handle_from_array.idx] = m.erase[m.size]
+
+// 	// Since the erase array contains the index of the correspondant Handle, we just have to replace 
+// 	// the Handle index to point at our moved data
+// 	m.handles[m.erase[handle_from_array.idx]].idx = m.erase[handle_from_array.idx]
+
+// 	// Update the free list tail to point to this delete slot
+// 	m.handles[m.free_list_tail].idx = handle_from_array.idx
+// 	m.free_list_tail = handle_from_array.idx
+
+// 	handle_from_array.gen += 1
+
+// 	return true
+// }
+
 @(require_results)
 fixed_slot_map_get_ptr :: #force_inline proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $HT/Handle),
@@ -171,11 +216,11 @@ fixed_slot_map_get :: #force_inline proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $HT/Handle),
 	handle: HT,
 ) -> (
-	^T,
+	T,
 	bool,
 ) #optional_ok {
 	if !fixed_slot_map_is_valid(m, handle) {
-		return nil, false
+		return {}, false
 	}
 
 	// Retrieve the handle from the array with the handle passed by the user
