@@ -234,10 +234,5 @@ fixed_slot_map_is_valid :: #force_inline proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $HT/Handle),
 	handle: HT,
 ) -> bool {
-	if handle.idx >= N || handle.gen == 0 {
-		return false
-	}
-
-	// Check if the handle's generation matches the stored generation
-	return handle.gen == m.handles[handle.idx].gen
+	return !(handle.idx >= N || handle.gen == 0) && handle.gen == m.handles[handle.idx].gen
 }

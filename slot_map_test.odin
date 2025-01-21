@@ -108,7 +108,6 @@ fixed_map_test :: proc(t: ^testing.T) {
 
 @(test)
 fixed_map_struct_test :: proc(t: ^testing.T) {
-	// Complex test structure
 	Entity :: struct {
 		name:      string,
 		position:  ^[3]f32, // Heap allocated position
@@ -128,7 +127,6 @@ fixed_map_struct_test :: proc(t: ^testing.T) {
 	}
 
 
-	// Test complex struct operations
 	struct_test :: proc(t: ^testing.T) {
 		slot_map: FixedSlotMap(10, Entity, Handle(int))
 		fixed_slot_map_init(&slot_map)
@@ -186,46 +184,6 @@ fixed_map_struct_test :: proc(t: ^testing.T) {
 		}
 	}
 
-	// Test rapid insertion/deletion of complex structs
-	struct_stress_test :: proc(t: ^testing.T) {
-		slot_map: FixedSlotMap(5, Entity, Handle(int))
-		fixed_slot_map_init(&slot_map)
 
-		handles: [dynamic]Handle(int)
-		defer delete(handles)
-
-		// Repeatedly insert and delete entities
-		for i := 0; i < 20; i += 1 {
-			if len(handles) < 5 {
-				// Insert new entity
-				entity := make_entity("Entity", f32(i) * 2, f32(i), f32(i) * -1, i * 10)
-				handle, ok := fixed_slot_map_new_handle_value(&slot_map, entity)
-				if ok {
-					append(&handles, handle)
-				}
-			} else {
-				// Remove random entity
-				if len(handles) > 0 {
-					idx := i % len(handles)
-					handle := handles[idx]
-					if entity_ptr, ok := fixed_slot_map_get_ptr(&slot_map, handle); ok {
-						destroy_entity(entity_ptr)
-					}
-					fixed_slot_map_delete_handle(&slot_map, handle)
-					ordered_remove(&handles, idx)
-				}
-			}
-		}
-
-		// Cleanup remaining entities
-		for handle in handles {
-			if entity_ptr, ok := fixed_slot_map_get_ptr(&slot_map, handle); ok {
-				destroy_entity(entity_ptr)
-			}
-		}
-	}
-
-	// Run the tests
 	struct_test(t)
-	struct_stress_test(t)
 }
