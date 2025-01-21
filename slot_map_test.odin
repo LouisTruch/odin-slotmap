@@ -104,3 +104,128 @@ fixed_map_test :: proc(t: ^testing.T) {
 	deletion_test(t)
 	validation_test(t)
 }
+
+
+@(test)
+fixed_map_struct_test :: proc(t: ^testing.T) {
+	// Complex test structure
+	Entity :: struct {
+		name:      string,
+		position:  ^[3]f32, // Heap allocated position
+		health:    int,
+		is_active: bool,
+	}
+
+	make_entity :: proc(name: string, x, y, z: f32, health: int) -> Entity {
+		pos := new([3]f32)
+		pos^ = [3]f32{x, y, z}
+		return Entity{name = name, position = pos, health = health, is_active = true}
+	}
+
+	destroy_entity :: proc(entity: ^Entity) {
+		free(entity.position)
+		entity^ = Entity{}
+	}
+
+
+	// Test complex struct operations
+	struct_test :: proc(t: ^testing.T) {
+		slot_map: FixedSlotMap(10, Entity, Handle(int))
+		fixed_slot_map_init(&slot_map)
+
+		// Create and insert entities
+		player := make_entity("Player", 0, 0, 0, 100)
+		enemy := make_entity("Enemy", 10, 0, 10, 50)
+
+		player_handle, ok1 := fixed_slot_map_new_handle_value(&slot_map, player)
+		testing.expect(t, ok1, "Player insertion should succeed")
+
+		enemy_handle, ok2 := fixed_slot_map_new_handle_value(&slot_map, enemy)
+		testing.expect(t, ok2, "Enemy insertion should succeed")
+
+		// Test accessing and modifying data
+		if player_ptr, ok := fixed_slot_map_get_ptr(&slot_map, player_handle); ok {
+			testing.expect(t, player_ptr.name == "Player", "Name should match")
+			testing.expect(t, player_ptr.health == 100, "Health should match")
+			testing.expect(t, player_ptr.position^[0] == 0, "Position X should match")
+
+			// Modify the entity
+			player_ptr.health -= 30
+			player_ptr.position^[0] = 5
+		} else {
+			testing.fail(t)
+		}
+
+		// Verify modifications
+		if player_data, ok := fixed_slot_map_get(&slot_map, player_handle); ok {
+			testing.expect(t, player_data.health == 70, "Modified health should persist")
+			testing.expect(t, player_data.position^[0] == 5, "Modified position should persist")
+		}
+
+		// Test deletion with cleanup
+		if enemy_ptr, ok := fixed_slot_map_get_ptr(&slot_map, enemy_handle); ok {
+			destroy_entity(enemy_ptr)
+		}
+		fixed_slot_map_delete_handle(&slot_map, enemy_handle)
+
+		// Test reuse of slot
+		npc := make_entity("NPC", -5, 0, -5, 30)
+		new_handle, ok3 := fixed_slot_map_new_handle_value(&slot_map, npc)
+		testing.expect(t, ok3, "Insertion into freed slot should succeed")
+
+		if npc_ptr, ok := fixed_slot_map_get_ptr(&slot_map, new_handle); ok {
+			testing.expect(t, npc_ptr.name == "NPC", "New entity should be accessible")
+		}
+
+		// Cleanup remaining entities
+		if player_ptr, ok := fixed_slot_map_get_ptr(&slot_map, player_handle); ok {
+			destroy_entity(player_ptr)
+		}
+		if npc_ptr, ok := fixed_slot_map_get_ptr(&slot_map, new_handle); ok {
+			destroy_entity(npc_ptr)
+		}
+	}
+
+	// Test rapid insertion/deletion of complex structs
+	struct_stress_test :: proc(t: ^testing.T) {
+		slot_map: FixedSlotMap(5, Entity, Handle(int))
+		fixed_slot_map_init(&slot_map)
+
+		handles: [dynamic]Handle(int)
+		defer delete(handles)
+
+		// Repeatedly insert and delete entities
+		for i := 0; i < 20; i += 1 {
+			if len(handles) < 5 {
+				// Insert new entity
+				entity := make_entity("Entity", f32(i) * 2, f32(i), f32(i) * -1, i * 10)
+				handle, ok := fixed_slot_map_new_handle_value(&slot_map, entity)
+				if ok {
+					append(&handles, handle)
+				}
+			} else {
+				// Remove random entity
+				if len(handles) > 0 {
+					idx := i % len(handles)
+					handle := handles[idx]
+					if entity_ptr, ok := fixed_slot_map_get_ptr(&slot_map, handle); ok {
+						destroy_entity(entity_ptr)
+					}
+					fixed_slot_map_delete_handle(&slot_map, handle)
+					ordered_remove(&handles, idx)
+				}
+			}
+		}
+
+		// Cleanup remaining entities
+		for handle in handles {
+			if entity_ptr, ok := fixed_slot_map_get_ptr(&slot_map, handle); ok {
+				destroy_entity(entity_ptr)
+			}
+		}
+	}
+
+	// Run the tests
+	struct_test(t)
+	struct_stress_test(t)
+}
