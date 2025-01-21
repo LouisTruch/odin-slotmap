@@ -16,7 +16,6 @@ Handle :: struct($T: typeid) where intrinsics.type_is_integer(T) {
 // Uses handle.gen = 0 as error value
 FixedSlotMap :: struct($N: int, $T: typeid, $HT: typeid) where N > 0 {
 	size:           int,
-	cap:            int,
 	// Array of every possible Handle
 	// Unused Handles are used as an in place free list
 	handles:        [N]HT,
@@ -29,8 +28,6 @@ FixedSlotMap :: struct($N: int, $T: typeid, $HT: typeid) where N > 0 {
 }
 
 fixed_slot_map_init :: proc "contextless" (m: ^FixedSlotMap($N, $T, $HT/Handle)) {
-	m.cap = N
-
 	for &handle, i in m.handles {
 		handle.idx = i + 1
 		handle.gen = 1
@@ -42,10 +39,7 @@ fixed_slot_map_init :: proc "contextless" (m: ^FixedSlotMap($N, $T, $HT/Handle))
 	// Last element points on itself 
 	m.handles[m.free_list_tail].idx = N - 1
 
-	for &e in m.erase {
-		// Use -1 as uninitialized value
-		e = -1
-	}
+	m.erase = -1
 }
 
 // Get a slot in the SlotMap 
@@ -56,7 +50,7 @@ fixed_slot_map_new_handle :: proc "contextless" (
 	HT,
 	bool,
 ) #optional_ok {
-	if m.size == m.cap {
+	if m.size == N {
 		return HT{0, 0}, false
 	}
 
@@ -87,7 +81,7 @@ fixed_slot_map_new_handle_value :: proc "contextless" (
 	HT,
 	bool,
 ) #optional_ok {
-	if m.size == m.cap {
+	if m.size == N {
 		return HT{0, 0}, false
 	}
 
