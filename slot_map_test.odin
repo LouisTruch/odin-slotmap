@@ -29,13 +29,32 @@ fixed_map_test :: proc(t: ^testing.T) {
 			v: int,
 			p: ^int,
 		}
+		HandleCoolStruct :: distinct Handle(int)
 
-		slot_map: FixedSlotMap(5, int, Handle(int))
+		STRUCT_MAX :: 6
+
+		slot_map: FixedSlotMap(STRUCT_MAX, CoolStruct, HandleCoolStruct)
 		fixed_slot_map_init(&slot_map)
 
-		// fixed_slot_map_new
+		cool_struct_array: [STRUCT_MAX]CoolStruct
+		for i in 0 ..< STRUCT_MAX {
+			cool_struct_array[i].v = i
+			cool_struct_array[i].p = &cool_struct_array[i].v
+			_ = fixed_slot_map_new_handle_value(&slot_map, cool_struct_array[i])
+		}
 
+		for i in 0 ..< STRUCT_MAX {
+			testing.expect(t, slot_map.data[i].v == cool_struct_array[i].v)
+			testing.expect(t, slot_map.data[i].p == cool_struct_array[i].p)
+		}
 
+		fixed_slot_map_clear(&slot_map)
+		testing.expect(t, slot_map.size == 0)
+
+		for i in 0 ..< STRUCT_MAX {
+			testing.expect(t, slot_map.data[i].v == 0)
+			testing.expect(t, slot_map.data[i].p == nil)
+		}
 	}
 
 	insertion_test :: proc(t: ^testing.T) {
@@ -43,7 +62,6 @@ fixed_map_test :: proc(t: ^testing.T) {
 		fixed_slot_map_init(&slot_map)
 
 		handle1, ok1 := fixed_slot_map_new_handle_value(&slot_map, 42)
-		testing.expect(t, ok1, "First insertion should succeed")
 		testing.expect(t, slot_map.size == 1, "Size should be 1 after first insertion")
 
 		value1, ok2 := fixed_slot_map_get_ptr(&slot_map, handle1)

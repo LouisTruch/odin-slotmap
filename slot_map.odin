@@ -9,7 +9,7 @@ Handle :: struct($T: typeid) where intrinsics.type_is_integer(T) {
 }
 
 
-// Allows to store the handle in 64 bits
+// Allows to store a 64 bits Handle in a ptr
 @(require_results)
 pack_handle :: #force_inline proc "contextless" (handle: Handle(int)) -> rawptr {
 	packed := (u64(handle.gen) << 32) | u64(handle.idx)
@@ -45,15 +45,16 @@ FixedSlotMap :: struct($N: int, $T: typeid, $HT: typeid) where N > 0 {
 
 
 //  TODO
-fixed_slot_map_make :: #force_inline proc "contextless" (
-	fixed_size: $N,
-	type: $T,
-	handle_type: $HT/Handle,
-) -> (
-	slot_map: FixedSlotMap(N, T, HT),
-) {
-	fixed_slot_map_init(&slot_map)
-}
+// fixed_slot_map_make :: #force_inline proc "contextless" (
+// 	fixed_size: $N,
+// 	$type: typeid,
+// 	$handle_type: typeid,
+// ) -> (
+// 	slot_map: FixedSlotMap(N, type, handle_type),
+// ) {
+// 	fixed_slot_map_init(&slot_map)
+// 	return slot_map
+// }
 
 
 fixed_slot_map_init :: #force_inline proc "contextless" (m: ^FixedSlotMap($N, $T, $HT/Handle)) {
@@ -181,7 +182,7 @@ fixed_slot_map_delete_handle_value :: proc "contextless" (
 ) -> (
 	T,
 	bool,
-) {
+) #optional_ok {
 	if !fixed_slot_map_is_valid(m, handle) {
 		return {}, false
 	}
