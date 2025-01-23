@@ -5,7 +5,7 @@ Very small implementation of what's described [here](https://www.youtube.com/wat
 For now there is only a fixed size implementation, and more testing is still to be added
 
 
-## What's a slot map
+## What's a slot map (Also called Handle array)
 
 It's an associative data structure made for high-performance look-ups, insertions and deletions. All these operations should take O(1) for every case from worst to best. For a non fixed-size slot map, when the container needs re-allocate to get more memory and move it, this is not guaranteed. For a fixed-size one the problem does not exist but you might have to be more carefull about the object you're allocating.
 
