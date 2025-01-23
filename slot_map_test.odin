@@ -5,22 +5,37 @@ import "core:testing"
 @(test)
 fixed_map_test :: proc(t: ^testing.T) {
 	init_test :: proc(t: ^testing.T) {
-		slot_map: FixedSlotMap(5, int, Handle(int))
+		N :: 5
+		slot_map: FixedSlotMap(N, int, Handle(int))
 		fixed_slot_map_init(&slot_map)
 
 		testing.expect(t, slot_map.size == 0, "Initial size should be 0")
 		testing.expect(t, slot_map.free_list_head == 0, "Free list head should start at 0")
-		testing.expect(t, slot_map.free_list_tail == 4, "Free list tail should be N-1")
+		testing.expect(t, slot_map.free_list_tail == N - 1, "Free list tail should be N-1")
 
 		// Check if handles are properly initialized
 		for handle, i in slot_map.handles {
 			testing.expect(t, handle.gen == 1, "Initial generation should be 1")
-			if i < len(slot_map.handles) - 1 {
+			if i < N - 1 {
 				testing.expect(t, handle.idx == i + 1, "Handle should point to next slot")
 			} else {
 				testing.expect(t, handle.idx == i, "Last handle should point to itself")
 			}
 		}
+	}
+
+	clear_test :: proc(t: ^testing.T) {
+		CoolStruct :: struct {
+			v: int,
+			p: ^int,
+		}
+
+		slot_map: FixedSlotMap(5, int, Handle(int))
+		fixed_slot_map_init(&slot_map)
+
+		// fixed_slot_map_new
+
+
 	}
 
 	insertion_test :: proc(t: ^testing.T) {
@@ -100,6 +115,7 @@ fixed_map_test :: proc(t: ^testing.T) {
 
 	// Run all tests
 	init_test(t)
+	clear_test(t)
 	insertion_test(t)
 	deletion_test(t)
 	validation_test(t)
@@ -183,7 +199,6 @@ fixed_map_struct_test :: proc(t: ^testing.T) {
 			destroy_entity(npc_ptr)
 		}
 	}
-
 
 	struct_test(t)
 }
