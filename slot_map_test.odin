@@ -1,8 +1,43 @@
 package slot_map
 
-import "core:fmt"
 import "core:math/rand"
 import "core:testing"
+
+
+@(test)
+handle_pack_test :: proc(t: ^testing.T) {
+	{
+		handle := Handle(int){42, 26}
+
+		packed_ptr := handle_pack(handle)
+		unpacked := handle_unpack(packed_ptr)
+
+		testing.expect(t, unpacked.idx == handle.idx)
+		testing.expect(t, unpacked.gen == handle.gen)
+	}
+	{
+		handle := Handle(int) {
+			idx = 0xFFFFFFFF,
+			gen = 0xFFFFFFFF,
+		}
+		packed_ptr := handle_pack(handle)
+		unpacked := handle_unpack(packed_ptr)
+
+		testing.expect(t, unpacked.idx == handle.idx)
+		testing.expect(t, unpacked.gen == handle.gen)
+	}
+	{
+		handle := Handle(int) {
+			idx = 0,
+			gen = 0,
+		}
+		packed_ptr := handle_pack(handle)
+		unpacked := handle_unpack(packed_ptr)
+
+		testing.expect(t, unpacked.idx == handle.idx)
+		testing.expect(t, unpacked.gen == handle.gen)
+	}
+}
 
 @(test)
 fixed_slot_map_make_test :: proc(t: ^testing.T) {
@@ -60,7 +95,7 @@ fixed_slot_map_clear_test :: proc(t: ^testing.T) {
 }
 
 @(test)
-fixed_slot_map_insertion_test :: proc(t: ^testing.T) {
+fixed_slot_map_insert_test :: proc(t: ^testing.T) {
 	N :: 5
 	slot_map: FixedSlotMap(N, int, Handle(int))
 	fixed_slot_map_init(&slot_map)
@@ -89,7 +124,32 @@ fixed_slot_map_insertion_test :: proc(t: ^testing.T) {
 
 
 @(test)
-fixed_slot_map_deletion_test :: proc(t: ^testing.T) {
+fixed_slot_map_insert_value_test :: proc(t: ^testing.T) {
+	N :: 5
+	slot_map := fixed_slot_map_make(N, int, Handle(int))
+
+	handle1, _ := fixed_slot_map_new_handle_value(&slot_map, 999)
+
+	value1, _ := fixed_slot_map_get(&slot_map, handle1)
+
+	testing.expect(t, value1 == 999, "Value not set correctly")
+	testing.expect(t, slot_map.data[0] == 999, "Value not set correctly")
+}
+
+
+@(test)
+fixed_slot_map_insert_ptr_test :: proc(t: ^testing.T) {
+	N :: 5
+	slot_map := fixed_slot_map_make(N, int, Handle(int))
+
+	handle1, ptr1, _ := fixed_slot_map_new_handle_get_ptr(&slot_map)
+	ptr1^ = 999
+	testing.expect(t, slot_map.data[0] == 999, "Value not set correctly")
+}
+
+
+@(test)
+fixed_slot_map_delete_test :: proc(t: ^testing.T) {
 	slot_map: FixedSlotMap(5, int, Handle(int))
 	fixed_slot_map_init(&slot_map)
 
@@ -125,7 +185,7 @@ fixed_slot_map_deletion_test :: proc(t: ^testing.T) {
 
 
 @(test)
-fixed_slot_map_deletion_value_test :: proc(t: ^testing.T) {
+fixed_slot_map_delete_value_test :: proc(t: ^testing.T) {
 	slot_map: FixedSlotMap(5, int, Handle(int))
 	fixed_slot_map_init(&slot_map)
 
@@ -139,7 +199,7 @@ fixed_slot_map_deletion_value_test :: proc(t: ^testing.T) {
 
 
 @(test)
-fixed_slot_map_validation_test :: proc(t: ^testing.T) {
+fixed_slot_map_valid_test :: proc(t: ^testing.T) {
 	slot_map: FixedSlotMap(5, int, Handle(int))
 	fixed_slot_map_init(&slot_map)
 

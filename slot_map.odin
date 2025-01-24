@@ -9,14 +9,14 @@ Handle :: struct($T: typeid) where intrinsics.type_is_integer(T) {
 }
 
 
-// Allows to store a 64 bits Handle in a ptr
+// Allows to store a 64 bits Handle in a 64bits ptr
 @(require_results)
-pack_handle :: #force_inline proc "contextless" (handle: Handle(int)) -> rawptr {
+handle_pack :: #force_inline proc "contextless" (handle: Handle(int)) -> rawptr {
 	packed := (u64(handle.gen) << 32) | u64(handle.idx)
 	return rawptr(uintptr(packed))
 }
 @(require_results)
-unpack_handle :: #force_inline proc "contextless" (ptr: rawptr) -> Handle(int) {
+handle_unpack :: #force_inline proc "contextless" (ptr: rawptr) -> Handle(int) {
 	packed := u64(uintptr(ptr))
 	return {idx = int(packed & 0xFFFFFFFF), gen = int(packed >> 32)}
 }
@@ -93,8 +93,7 @@ fixed_slot_map_new_handle :: proc "contextless" (
 	HT,
 	bool,
 ) #optional_ok {
-	// Means there is only 1 slot left in the free list, 
-	if m.free_list_head == m.free_list_tail {
+	if is_slot_map_full(m) {
 		return HT{0, 0}, false
 	}
 
@@ -116,8 +115,7 @@ fixed_slot_map_new_handle_value :: proc "contextless" (
 	HT,
 	bool,
 ) #optional_ok {
-	// Means there is only 1 slot left in the free list, 
-	if m.free_list_head == m.free_list_tail {
+	if is_slot_map_full(m) {
 		return HT{0, 0}, false
 	}
 
@@ -142,9 +140,8 @@ fixed_slot_map_new_handle_get_ptr :: proc "contextless" (
 	^T,
 	bool,
 ) {
-	// Means there is only 1 slot left in the free list, 
-	if m.free_list_head == m.free_list_tail {
-		return HT{0, 0}, false
+	if is_slot_map_full(m) {
+		return HT{0, 0}, nil, false
 	}
 
 	user_handle := generate_new_user_handle(m)
@@ -251,6 +248,16 @@ fixed_slot_map_is_valid :: #force_inline proc "contextless" (
 		!(handle.idx >= N || handle.idx < 0 || handle.gen == 0) &&
 		handle.gen == m.handles[handle.idx].gen \
 	)
+}
+
+
+@(private = "file")
+is_slot_map_full :: #force_inline proc "contextless" (
+	m: ^FixedSlotMap($N, $T, $HT/Handle),
+) -> bool {
+	// Means there is only 1 slot left in the free list
+	// We keep 1 slot free to not mess the free list
+	return m.free_list_head == m.free_list_tail
 }
 
 
