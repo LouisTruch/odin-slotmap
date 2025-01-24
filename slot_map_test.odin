@@ -5,151 +5,152 @@ import "core:math/rand"
 import "core:testing"
 
 @(test)
-fixed_slot_map_basic_test :: proc(t: ^testing.T) {
-	init_test :: proc(t: ^testing.T) {
-		N :: 5
-		slot_map: FixedSlotMap(N, int, Handle(int))
-		fixed_slot_map_init(&slot_map)
+fixed_slot_map_make_test :: proc(t: ^testing.T) {
+	N :: 5
+	slot_map := fixed_slot_map_make(N, int, Handle(int))
 
-		testing.expect(t, slot_map.size == 0, "Initial size should be 0")
-		testing.expect(t, slot_map.free_list_head == 0, "Free list head should start at 0")
-		testing.expect(t, slot_map.free_list_tail == N - 1, "Free list tail should be N-1")
+	testing.expect(t, slot_map.size == 0, "Initial size should be 0")
+	testing.expect(t, slot_map.free_list_head == 0, "Free list head should start at 0")
+	testing.expect(t, slot_map.free_list_tail == 4, "Free list tail should be N-1")
 
-		// Check if handles are properly initialized
-		for handle, i in slot_map.handles {
-			testing.expect(t, handle.gen == 1, "Initial generation should be 1")
-			if i < N - 1 {
-				testing.expect(t, handle.idx == i + 1, "Handle should point to next slot")
-			} else {
-				testing.expect(t, handle.idx == i, "Last handle should point to itself")
-			}
+	// Check if handles are properly initialized
+	for handle, i in slot_map.handles {
+		testing.expect(t, handle.gen == 1, "Initial generation should be 1")
+		if i < N - 1 {
+			testing.expect(t, handle.idx == i + 1, "Handle should point to next slot")
+		} else {
+			testing.expect(t, handle.idx == i, "Last handle should point to itself")
 		}
 	}
+}
 
-	clear_test :: proc(t: ^testing.T) {
-		CoolStruct :: struct {
-			v: int,
-			p: ^int,
-		}
-		HandleCoolStruct :: distinct Handle(int)
 
-		STRUCT_MAX :: 6
+@(test)
+fixed_slot_map_clear_test :: proc(t: ^testing.T) {
+	CoolStruct :: struct {
+		v: int,
+		p: ^int,
+	}
+	HandleCoolStruct :: distinct Handle(int)
 
-		slot_map: FixedSlotMap(STRUCT_MAX, CoolStruct, HandleCoolStruct)
-		fixed_slot_map_init(&slot_map)
+	STRUCT_MAX :: 6
 
-		cool_struct_array: [STRUCT_MAX]CoolStruct
-		for i in 0 ..< STRUCT_MAX {
-			cool_struct_array[i].v = i
-			cool_struct_array[i].p = &cool_struct_array[i].v
-			_, ok := fixed_slot_map_new_handle_value(&slot_map, cool_struct_array[i])
-			switch i {
-			case STRUCT_MAX - 1:
-				assert(ok == false)
-			case:
-				assert(ok == true)
-			}
-		}
+	slot_map: FixedSlotMap(STRUCT_MAX, CoolStruct, HandleCoolStruct)
+	fixed_slot_map_init(&slot_map)
 
-		for i in 0 ..< STRUCT_MAX - 1 {
-			testing.expect(t, slot_map.data[i].v == cool_struct_array[i].v)
-			testing.expect(t, slot_map.data[i].p == cool_struct_array[i].p)
-		}
-
-		fixed_slot_map_clear(&slot_map)
-		testing.expect(t, slot_map.size == 0)
-
-		for i in 0 ..< STRUCT_MAX - 1 {
-			testing.expect(t, slot_map.data[i].v == 0)
-			testing.expect(t, slot_map.data[i].p == nil)
-		}
+	cool_struct_array: [STRUCT_MAX]CoolStruct
+	for i in 0 ..< STRUCT_MAX {
+		cool_struct_array[i].v = i
+		cool_struct_array[i].p = &cool_struct_array[i].v
+		_ = fixed_slot_map_new_handle_value(&slot_map, cool_struct_array[i])
 	}
 
-	insertion_test :: proc(t: ^testing.T) {
-		slot_map: FixedSlotMap(5, int, Handle(int))
-		fixed_slot_map_init(&slot_map)
-
-		handle1, ok1 := fixed_slot_map_new_handle_value(&slot_map, 42)
-		testing.expect(t, slot_map.size == 1, "Size should be 1 after first insertion")
-
-		value1, ok2 := fixed_slot_map_get_ptr(&slot_map, handle1)
-		testing.expect(t, ok2, "Should be able to get first value")
-		testing.expect(t, value1^ == 42, "Retrieved value should match inserted value")
-
-		// Test filling the slot_map
-		handles: [5]Handle(int)
-		for i in 1 ..< 5 {
-			h, ok := fixed_slot_map_new_handle_value(&slot_map, i * 10)
-			testing.expect(t, ok, "Insertion within capacity should succeed")
-			handles[i] = h
-		}
-
-		// Test insertion when full
-		_, ok3 := fixed_slot_map_new_handle_value(&slot_map, 100)
-		testing.expect(t, !ok3, "Insertion when full should fail")
+	for i in 0 ..< STRUCT_MAX - 1 {
+		testing.expect(t, slot_map.data[i].v == cool_struct_array[i].v)
+		testing.expect(t, slot_map.data[i].p == cool_struct_array[i].p)
 	}
 
-	deletion_test :: proc(t: ^testing.T) {
-		slot_map: FixedSlotMap(5, int, Handle(int))
-		fixed_slot_map_init(&slot_map)
+	fixed_slot_map_clear(&slot_map)
+	testing.expect(t, slot_map.size == 0)
 
-		handle1, _ := fixed_slot_map_new_handle_value(&slot_map, 42)
-		handle2, _ := fixed_slot_map_new_handle_value(&slot_map, 43)
-
-		ok := fixed_slot_map_delete_handle(&slot_map, handle1)
-		testing.expect(t, ok, "Deletion should succeed")
-		testing.expect(t, slot_map.size == 1, "Size should decrease after deletion")
-
-		// Test that the handle is invalid after deletion
-		_, ok2 := fixed_slot_map_get(&slot_map, handle1)
-		testing.expect(t, !ok2, "Deleted handle should be invalid")
-
-		// Test that we can still access other values
-		value2, ok3 := fixed_slot_map_get_ptr(&slot_map, handle2)
-		testing.expect(t, ok3, "Non-deleted handle should still be valid")
-		testing.expect(t, value2^ == 43, "Non-deleted value should be unchanged")
+	for i in 0 ..< STRUCT_MAX - 1 {
+		testing.expect(t, slot_map.data[i].v == 0)
+		testing.expect(t, slot_map.data[i].p == nil)
 	}
-
-	// Test handle validation
-	validation_test :: proc(t: ^testing.T) {
-		slot_map: FixedSlotMap(5, int, Handle(int))
-		fixed_slot_map_init(&slot_map)
-
-		// Test invalid handle
-		invalid_handle := Handle(int) {
-			idx = 999,
-			gen = 1,
-		}
-		testing.expect(
-			t,
-			!fixed_slot_map_is_valid(&slot_map, invalid_handle),
-			"Invalid index should be rejected",
-		)
-
-		// Test generation mismatch
-		handle1, _ := fixed_slot_map_new_handle_value(&slot_map, 42)
-		invalid_gen_handle := Handle(int) {
-			idx = handle1.idx,
-			gen = handle1.gen + 1,
-		}
-		testing.expect(
-			t,
-			!fixed_slot_map_is_valid(&slot_map, invalid_gen_handle),
-			"Generation mismatch should be rejected",
-		)
-	}
-
-	// Run all tests
-	init_test(t)
-	clear_test(t)
-	insertion_test(t)
-	deletion_test(t)
-	validation_test(t)
 }
 
 @(test)
-fixed_slot_map_check_free_list :: proc(t: ^testing.T) {
+fixed_slot_map_insertion_test :: proc(t: ^testing.T) {
+	N :: 5
+	slot_map: FixedSlotMap(N, int, Handle(int))
+	fixed_slot_map_init(&slot_map)
 
+	handle1, ok1 := fixed_slot_map_new_handle_value(&slot_map, 42)
+	testing.expect(t, slot_map.size == 1, "Size should be 1 after first insertion")
+	testing.expect(t, slot_map.free_list_head == 1, "Head should have advanced by one")
+	testing.expect(t, slot_map.free_list_tail == 4, "Tail should not move")
+
+	value1, ok2 := fixed_slot_map_get_ptr(&slot_map, handle1)
+	testing.expect(t, ok2, "Should be able to get first value")
+	testing.expect(t, value1^ == 42, "Retrieved value should match inserted value")
+
+	// Test filling the slot_map
+	handles: [N - 1]Handle(int)
+	for i in 1 ..< N - 1 {
+		h, ok := fixed_slot_map_new_handle_value(&slot_map, i * 10)
+		testing.expect(t, ok, "Insert within N - 1 should succeed")
+		handles[i] = h
+	}
+
+	// Test insertion when full
+	_, ok3 := fixed_slot_map_new_handle_value(&slot_map, 100)
+	testing.expect(t, !ok3, "Insert when full should fail")
+}
+
+
+@(test)
+fixed_slot_map_deletion_test :: proc(t: ^testing.T) {
+	slot_map: FixedSlotMap(5, int, Handle(int))
+	fixed_slot_map_init(&slot_map)
+
+	handle1, _ := fixed_slot_map_new_handle_value(&slot_map, 10)
+	handle2, _ := fixed_slot_map_new_handle_value(&slot_map, 20)
+	handle3, _ := fixed_slot_map_new_handle_value(&slot_map, 30)
+
+	ok := fixed_slot_map_delete_handle(&slot_map, handle1)
+	testing.expect(t, ok, "Deletion should succeed")
+	testing.expect(t, slot_map.size == 2, "Size should decrease after deletion")
+	// Deleted first handle so the last one gets its slot
+	testing.expect(t, slot_map.data[0] == 30, "Data was not correctly moved")
+	testing.expect(t, slot_map.free_list_tail == 0, "Tail was not set properly")
+	testing.expect(
+		t,
+		slot_map.handles[slot_map.free_list_tail].idx == 0,
+		"Tail was not set properly",
+	)
+	testing.expect(
+		t,
+		slot_map.free_list_head != slot_map.free_list_tail,
+		"Tail was not set properly",
+	)
+
+	_, ok2 := fixed_slot_map_get(&slot_map, handle1)
+	testing.expect(t, !ok2, "Deleted handle should be invalid")
+
+	// Test that we can still access other values
+	moved_value, ok3 := fixed_slot_map_get(&slot_map, handle3)
+	testing.expect(t, ok3, "Non-deleted handle should still be valid")
+	testing.expect(t, moved_value == 30, "Non-deleted value should be unchanged")
+}
+
+
+@(test)
+fixed_slot_map_validation_test :: proc(t: ^testing.T) {
+	slot_map: FixedSlotMap(5, int, Handle(int))
+	fixed_slot_map_init(&slot_map)
+
+	// Test invalid handle
+	invalid_handle := Handle(int) {
+		idx = 999,
+		gen = 1,
+	}
+	testing.expect(
+		t,
+		!fixed_slot_map_is_valid(&slot_map, invalid_handle),
+		"Invalid index should be rejected",
+	)
+
+	// Test generation mismatch
+	handle1, _ := fixed_slot_map_new_handle_value(&slot_map, 42)
+	invalid_gen_handle := Handle(int) {
+		idx = handle1.idx,
+		gen = handle1.gen + 1,
+	}
+	testing.expect(
+		t,
+		!fixed_slot_map_is_valid(&slot_map, invalid_gen_handle),
+		"Generation mismatch should be rejected",
+	)
 }
 
 
@@ -236,115 +237,98 @@ fixed_slot_map_struct_with_ptr_test :: proc(t: ^testing.T) {
 
 
 @(test)
-fixed_slot_map_random_insertion_deletion_test :: proc(t: ^testing.T) {
-	CoolerStruct :: struct {
-		v:       int,
-		is_cool: bool,
-	}
-	CoolerStructHandle :: distinct Handle(int)
+fixed_slot_map_insert_delete_test :: proc(t: ^testing.T) {
+	N :: 4
+	slot_map := fixed_slot_map_make(N, int, Handle(int))
 
-	SLOT_SIZE :: 50
-	slot_map: FixedSlotMap(SLOT_SIZE, CoolerStruct, CoolerStructHandle)
-	fixed_slot_map_init(&slot_map)
+	handle1, ok1 := fixed_slot_map_new_handle_value(&slot_map, 10)
+	handle2, ok2 := fixed_slot_map_new_handle_value(&slot_map, 20)
+	handle3, ok3 := fixed_slot_map_new_handle_value(&slot_map, 30)
+	// Slot Map has N - 1 slots so can't use the 4th one
+	handle4, ok4 := fixed_slot_map_new_handle(&slot_map)
+	testing.expect(t, ok4 == false, "Should not be able to fill the slot map completly")
 
-	handles: [dynamic]CoolerStructHandle
+	// There Head and Tail should be = 3
+	testing.expect(t, slot_map.free_list_head == 3)
+	testing.expect(t, slot_map.free_list_tail == 3)
+
+	// Delete the second slot, so last slot is moved to [1]
+	ok2 = fixed_slot_map_delete_handle(&slot_map, handle2)
+	testing.expect(t, slot_map.data[1] == 30)
+	testing.expect(t, slot_map.free_list_head == 3)
+	testing.expect(t, slot_map.free_list_tail == 1)
+
+	handle4, ok4 = fixed_slot_map_new_handle_value(&slot_map, 40)
+	testing.expect(t, slot_map.data[2] == 40)
+	testing.expect(t, slot_map.free_list_head == 1)
+	testing.expect(t, slot_map.free_list_tail == 1)
+
+	ok1 = fixed_slot_map_delete_handle(&slot_map, handle1)
+	testing.expect(t, slot_map.data[0] == 40)
+	testing.expect(t, slot_map.free_list_tail == 0)
+}
+
+
+@(test)
+fixed_slot_map_random_insert_delete_test :: proc(t: ^testing.T) {
+	N :: 1000
+	slot_map := fixed_slot_map_make(N, int, Handle(int))
+
+	handles := make([dynamic]Handle(int))
 	defer delete(handles)
 
+	Operation :: enum {
+		Ins,
+		Del,
+	}
+	random_ope :: proc() -> Operation {
+		opes := [2]Operation{.Ins, .Del}
+		return rand.choice(opes[:])
+	}
 
-	// nb_init := rand.int_max(SLOT_SIZE)
-	// for i in 0 ..< nb_init {
-	// 	struct_val := CoolerStruct {
-	// 		v       = i * 10,
-	// 		is_cool = i % 2 == 0,
-	// 	}
-	// 	handle, ok := fixed_slot_map_new_handle_value(&slot_map, struct_val)
-	// 	testing.expect(t, ok, "Insertion should succeed")
-	// 	append(&handles, handle)
-	// }
+	TURNS :: 10000
+	for _ in 0 ..< TURNS {
+		ope := random_ope()
 
+		switch ope {
+		case .Ins:
+			new_handle, ok := fixed_slot_map_new_handle_value(&slot_map, 0)
+			if ok {
+				append(&handles, new_handle)
 
-	// // Verify Handles and their corresponding value
-	// for handle, i in handles {
-	// 	if val, ok := fixed_slot_map_get(&slot_map, handle); ok {
-	// 		testing.expect(t, val.v == i * 10, "Value does not match")
-	// 		testing.expect(t, val.is_cool == (i % 2 == 0), "Not cool")
-	// 	} else {
-	// 		testing.expect(t, false, "Handle should be valid")
-	// 	}
-	// }
+				// Check for collisions, 2 same Handles should never be returned
+				for handle1, i in handles {
+					for handle2, j in handles {
+						if i == j {
+							continue
+						}
 
-	// for _ in 0 ..< 2 {
-	// 	nb_deletions: int = rand.int_max(slot_map.size)
-	// 	for i in 0 ..< nb_deletions {
-	// 		if len(handles) < 0 || slot_map.size == 0 {
-	// 			break
-	// 		}
-	// 		del_index := rand.int_max(max(int)) % len(handles)
-	// 		handle := handles[del_index]
-	// 		ok := fixed_slot_map_delete_handle(&slot_map, handle)
-	// 		testing.expect(t, ok, "Delete failed")
-	// 		ordered_remove(&handles, del_index)
-	// 	}
+						testing.expectf(
+							t,
+							handle1 != handle2,
+							"Slot Map returned 2 times the same Handle {%i %i}",
+							handle1.idx,
+							handle1.gen,
+						)
+					}
+				}
+			}
+		case .Del:
+			if len(handles) > 0 {
+				testing.expect(t, len(handles) == slot_map.size)
 
-	// 	nb_reinsertions: int = rand.int_max(slot_map.size)
-	// 	for i in 0 ..< nb_reinsertions {
-	// 		if slot_map.size == SLOT_SIZE {
-	// 			break
-	// 		}
+				idx := rand.int_max(max(int)) % len(handles)
+				handle := handles[idx]
+				unordered_remove(&handles, idx)
 
-	// 		struct_val := CoolerStruct {
-	// 			v       = i * 100 + len(handles),
-	// 			is_cool = (i + len(handles)) % 3 == 0,
-	// 		}
-	// 		handle, ok := fixed_slot_map_new_handle_value(&slot_map, struct_val)
-	// 		testing.expect(t, ok, "Reinsertion should succeed")
-	// 		append(&handles, handle)
+				old_tail := slot_map.free_list_tail
+				ok := fixed_slot_map_delete_handle(&slot_map, handle)
+				testing.expect(t, ok)
 
-	// 		// val, ok2 := fixed_slot_map_get(&slot_map, handle)
-	// 		// testing.expect(t, ok2, "Newly inserted handle should be valid")
-	// 		// testing.expect(t, val.v == i * 100 + len(handles) - 1, "Reinserted value should match")
-	// 		// testing.expect(
-	// 		// 	t,
-	// 		// 	val.is_cool == ((i + len(handles) - 1) % 3 == 0),
-	// 		// 	"Reinserted cool status should match",
-	// 		// )
-	// 	}
-	// }
-
-	// for _ in 0 ..< 10 {
-	// 	// Random deletion
-	// 	nb_deletions: int = rand.int_max(SLOT_SIZE)
-	// 	nb_deletions = clamp(nb_deletions, nb_deletions, slot_map.size - 1)
-	// 	testing.expectf(t, false, "nb_deletions %i", nb_deletions)
-	// 	for i in 0 ..< nb_deletions {
-	// 		if len(handles) > 0 {
-	// 			del_idx := rand.int_max(max(int)) % len(handles)
-	// 			handle := handles[del_idx]
-	// 			ok := fixed_slot_map_delete_handle(&slot_map, handle)
-	// 			testing.expect(t, ok, "Deletion should succeed")
-	// 			ordered_remove(&handles, del_idx)
-	// 		}
-	// 	}
-
-	// 	nb_reinsertions := rand.int_max(max(int)) % SLOT_SIZE
-	// 	nb_reinsertions = clamp(nb_reinsertions, nb_deletions, SLOT_SIZE - slot_map.size)
-	// 	for i in 0 ..< nb_reinsertions {
-	// 		struct_val := CoolerStruct {
-	// 			v       = i * 100 + len(handles),
-	// 			is_cool = (i + len(handles)) % 3 == 0,
-	// 		}
-	// 		handle, ok := fixed_slot_map_new_handle_value(&slot_map, struct_val)
-	// 		testing.expect(t, ok, "Reinsertion should succeed")
-	// 		append(&handles, handle)
-
-	// 		val, ok2 := fixed_slot_map_get(&slot_map, handle)
-	// 		testing.expect(t, ok2, "Newly inserted handle should be valid")
-	// 		testing.expect(t, val.v == i * 100 + len(handles) - 1, "Reinserted value should match")
-	// 		testing.expect(
-	// 			t,
-	// 			val.is_cool == ((i + len(handles) - 1) % 3 == 0),
-	// 			"Reinserted cool status should match",
-	// 		)
-	// 	}
-	// }
+				pointed_handle_idx := handle.idx
+				new_tail := slot_map.free_list_tail
+				testing.expect(t, new_tail == pointed_handle_idx)
+			}
+		}
+	}
 }

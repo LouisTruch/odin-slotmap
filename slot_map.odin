@@ -33,7 +33,6 @@ unpack_handle :: #force_inline proc "contextless" (ptr: rawptr) -> Handle(int) {
 FixedSlotMap :: struct($N: int, $T: typeid, $HT: typeid) where N > 1 {
 	size:           int,
 	free_list_head: int,
-	// TODO: Remove, not needed for fixed size array I think
 	free_list_tail: int,
 	// Array of every possible Handle
 	// Unused Handles are used as an in place free list
@@ -44,17 +43,18 @@ FixedSlotMap :: struct($N: int, $T: typeid, $HT: typeid) where N > 1 {
 }
 
 
-//  TODO
-// fixed_slot_map_make :: #force_inline proc "contextless" (
-// 	fixed_size: $N,
-// 	$type: typeid,
-// 	$handle_type: typeid,
-// ) -> (
-// 	slot_map: FixedSlotMap(N, type, handle_type),
-// ) {
-// 	fixed_slot_map_init(&slot_map)
-// 	return slot_map
-// }
+// Returns an initialized slot map
+@(require_results)
+fixed_slot_map_make :: #force_inline proc "contextless" (
+	$N: int,
+	$T: typeid,
+	$HT: typeid,
+) -> (
+	slot_map: FixedSlotMap(N, T, HT),
+) {
+	fixed_slot_map_init(&slot_map)
+	return slot_map
+}
 
 
 fixed_slot_map_init :: #force_inline proc "contextless" (m: ^FixedSlotMap($N, $T, $HT/Handle)) {
@@ -93,7 +93,7 @@ fixed_slot_map_new_handle :: proc "contextless" (
 	HT,
 	bool,
 ) #optional_ok {
-	// Means there is only 1 slot left
+	// Means there is only 1 slot left in the free list, 
 	if m.free_list_head == m.free_list_tail {
 		return HT{0, 0}, false
 	}
@@ -116,8 +116,9 @@ fixed_slot_map_new_handle_get_ptr :: proc "contextless" (
 	^T,
 	bool,
 ) {
-	if m.size == N {
-		return HT{0, 0}, nil, false
+	// Means there is only 1 slot left in the free list, 
+	if m.free_list_head == m.free_list_tail {
+		return HT{0, 0}, false
 	}
 
 	user_handle := generate_new_user_handle(m)
@@ -138,6 +139,7 @@ fixed_slot_map_new_handle_value :: proc "contextless" (
 	HT,
 	bool,
 ) #optional_ok {
+	// Means there is only 1 slot left in the free list, 
 	if m.free_list_head == m.free_list_tail {
 		return HT{0, 0}, false
 	}
@@ -159,15 +161,13 @@ fixed_slot_map_new_handle_value :: proc "contextless" (
 // ! This makes data move in the slot map, old data is not cleared !
 fixed_slot_map_delete_handle :: proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $HT/Handle),
-	handle: HT,
+	user_handle: HT,
 ) -> bool {
-	if !fixed_slot_map_is_valid(m, handle) {
+	if !fixed_slot_map_is_valid(m, user_handle) {
 		return false
 	}
 
-	handle_from_array := user_handle_get_array_handle_ptr(m, handle)
-
-	delete_slot(m, handle_from_array, handle)
+	delete_slot(m, user_handle)
 
 	return true
 }
@@ -179,16 +179,16 @@ fixed_slot_map_delete_handle :: proc "contextless" (
 // ! This makes data move in the slot map, old data is not cleared !
 fixed_slot_map_delete_handle_value :: proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $HT/Handle),
-	handle: HT,
+	user_handle: HT,
 ) -> (
 	T,
 	bool,
 ) #optional_ok {
-	if !fixed_slot_map_is_valid(m, handle) {
+	if !fixed_slot_map_is_valid(m, user_handle) {
 		return {}, false
 	}
 
-	handle_from_array := user_handle_get_array_handle_ptr(m, handle)
+	handle_from_array := user_handle_get_array_handle_ptr(m, user_handle)
 
 	// Make a copy of the deleted data before overwriting it
 	deleted_data_copy := m.data[handle_from_array.idx]
@@ -302,9 +302,10 @@ create_slot :: #force_inline proc "contextless" (
 @(private = "file")
 delete_slot :: #force_inline proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $HT/Handle),
-	handle: ^HT,
 	user_handle: HT,
 ) {
+	handle := user_handle_get_array_handle_ptr(m, user_handle)
+
 	m.size -= 1
 
 	// Overwrite the data of the deleted slot with the data from the last slot
