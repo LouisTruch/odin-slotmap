@@ -106,29 +106,6 @@ fixed_slot_map_new_handle :: proc "contextless" (
 }
 
 
-// Asks the slot map for a new Handle
-// Return said Handle, a pointer to the beginning of data in the slot map and a boolean indicating the success or not of the operation
-@(require_results)
-fixed_slot_map_new_handle_get_ptr :: proc "contextless" (
-	m: ^FixedSlotMap($N, $T, $HT/Handle),
-) -> (
-	HT,
-	^T,
-	bool,
-) {
-	// Means there is only 1 slot left in the free list, 
-	if m.free_list_head == m.free_list_tail {
-		return HT{0, 0}, false
-	}
-
-	user_handle := generate_new_user_handle(m)
-
-	create_slot(m, &user_handle)
-
-	return user_handle, &m.data[m.size - 1], true
-}
-
-
 // Asks the slot map for a new Handle and put the data you pass in the slot map
 // Return said Handle and a boolean indicating the success or not of the operation
 @(require_results)
@@ -155,6 +132,29 @@ fixed_slot_map_new_handle_value :: proc "contextless" (
 }
 
 
+// Asks the slot map for a new Handle
+// Return said Handle, a pointer to the beginning of data in the slot map and a boolean indicating the success or not of the operation
+@(require_results)
+fixed_slot_map_new_handle_get_ptr :: proc "contextless" (
+	m: ^FixedSlotMap($N, $T, $HT/Handle),
+) -> (
+	HT,
+	^T,
+	bool,
+) {
+	// Means there is only 1 slot left in the free list, 
+	if m.free_list_head == m.free_list_tail {
+		return HT{0, 0}, false
+	}
+
+	user_handle := generate_new_user_handle(m)
+
+	create_slot(m, &user_handle)
+
+	return user_handle, &m.data[m.size - 1], true
+}
+
+
 // Try to give back the Handle and a slot of data to the slot map
 // The Handle might has already been given back
 // The return value confirms the success of the deletion, or not
@@ -167,7 +167,9 @@ fixed_slot_map_delete_handle :: proc "contextless" (
 		return false
 	}
 
-	delete_slot(m, user_handle)
+	handle := user_handle_get_array_handle_ptr(m, user_handle)
+
+	delete_slot(m, handle, user_handle)
 
 	return true
 }
@@ -188,12 +190,12 @@ fixed_slot_map_delete_handle_value :: proc "contextless" (
 		return {}, false
 	}
 
-	handle_from_array := user_handle_get_array_handle_ptr(m, user_handle)
+	handle := user_handle_get_array_handle_ptr(m, user_handle)
 
 	// Make a copy of the deleted data before overwriting it
-	deleted_data_copy := m.data[handle_from_array.idx]
+	deleted_data_copy := m.data[handle.idx]
 
-	delete_slot(m, handle_from_array)
+	delete_slot(m, handle, user_handle)
 
 	return deleted_data_copy, true
 }
@@ -302,10 +304,9 @@ create_slot :: #force_inline proc "contextless" (
 @(private = "file")
 delete_slot :: #force_inline proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $HT/Handle),
+	handle: ^HT,
 	user_handle: HT,
 ) {
-	handle := user_handle_get_array_handle_ptr(m, user_handle)
-
 	m.size -= 1
 
 	// Overwrite the data of the deleted slot with the data from the last slot

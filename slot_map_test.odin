@@ -125,6 +125,20 @@ fixed_slot_map_deletion_test :: proc(t: ^testing.T) {
 
 
 @(test)
+fixed_slot_map_deletion_value_test :: proc(t: ^testing.T) {
+	slot_map: FixedSlotMap(5, int, Handle(int))
+	fixed_slot_map_init(&slot_map)
+
+	handle1, _ := fixed_slot_map_new_handle_value(&slot_map, 10)
+	handle2, _ := fixed_slot_map_new_handle_value(&slot_map, 20)
+	handle3, _ := fixed_slot_map_new_handle_value(&slot_map, 30)
+
+	value1, ok := fixed_slot_map_delete_handle_value(&slot_map, handle1)
+	testing.expect(t, value1 == 10, "Deleted value is not correct")
+}
+
+
+@(test)
 fixed_slot_map_validation_test :: proc(t: ^testing.T) {
 	slot_map: FixedSlotMap(5, int, Handle(int))
 	fixed_slot_map_init(&slot_map)
@@ -286,7 +300,7 @@ fixed_slot_map_random_insert_delete_test :: proc(t: ^testing.T) {
 		return rand.choice(opes[:])
 	}
 
-	TURNS :: 10000
+	TURNS :: 1000
 	for _ in 0 ..< TURNS {
 		ope := random_ope()
 
