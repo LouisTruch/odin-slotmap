@@ -23,21 +23,21 @@ unpack_handle :: #force_inline proc "contextless" (ptr: rawptr) -> Handle(int) {
 
 
 // Fixed Size Dense Slot Map
-// Of size N ( > 0 )
+// Of size N ( > 0 ) ! It can't be full, max used slots is N - 1
 // Type T
 // Handle of type HT
 // Not protected against gen overflow
 // Uses handle.gen = 0 as error value
 // It makes 0 allocation since the arrays are of fixed size
 // You should be careful about stack overflows if you don't alloc it
-FixedSlotMap :: struct($N: int, $T: typeid, $HT: typeid) where N > 0 {
+FixedSlotMap :: struct($N: int, $T: typeid, $HT: typeid) where N > 1 {
 	size:           int,
-	// Array of every possible Handle
-	// Unused Handles are used as an in place free list
-	handles:        [N]HT,
 	free_list_head: int,
 	// TODO: Remove, not needed for fixed size array I think
 	free_list_tail: int,
+	// Array of every possible Handle
+	// Unused Handles are used as an in place free list
+	handles:        [N]HT,
 	// Used to keep track of the data of a given Handle when deleting
 	erase:          [N]int,
 	data:           [N]T,
@@ -93,7 +93,8 @@ fixed_slot_map_new_handle :: proc "contextless" (
 	HT,
 	bool,
 ) #optional_ok {
-	if m.size == N {
+	// Means there is only 1 slot left
+	if m.free_list_head == m.free_list_tail {
 		return HT{0, 0}, false
 	}
 
@@ -137,17 +138,16 @@ fixed_slot_map_new_handle_value :: proc "contextless" (
 	HT,
 	bool,
 ) #optional_ok {
-	if m.size == N {
+	if m.free_list_head == m.free_list_tail {
 		return HT{0, 0}, false
 	}
 
 	user_handle := generate_new_user_handle(m)
 
-	create_slot(m, &user_handle)
-
 	// Copy the passed data in the data array
-	// At size - 1 since size has been updated in create_slot()
-	m.data[m.size - 1] = data
+	m.data[m.size] = data
+
+	create_slot(m, &user_handle)
 
 	return user_handle, true
 }
@@ -164,9 +164,10 @@ fixed_slot_map_delete_handle :: proc "contextless" (
 	if !fixed_slot_map_is_valid(m, handle) {
 		return false
 	}
-	handle_from_array := user_handle_to_array_handle(m, handle)
 
-	delete_slot(m, handle_from_array)
+	handle_from_array := user_handle_get_array_handle_ptr(m, handle)
+
+	delete_slot(m, handle_from_array, handle)
 
 	return true
 }
@@ -186,9 +187,8 @@ fixed_slot_map_delete_handle_value :: proc "contextless" (
 	if !fixed_slot_map_is_valid(m, handle) {
 		return {}, false
 	}
-	m.size -= 1
 
-	handle_from_array := user_handle_to_array_handle(m, handle)
+	handle_from_array := user_handle_get_array_handle_ptr(m, handle)
 
 	// Make a copy of the deleted data before overwriting it
 	deleted_data_copy := m.data[handle_from_array.idx]
@@ -212,7 +212,7 @@ fixed_slot_map_get_ptr :: #force_inline proc "contextless" (
 		return nil, false
 	}
 
-	handle_from_array := user_handle_to_array_handle(m, handle)
+	handle_from_array := user_handle_get_array_handle_ptr(m, handle)
 
 	return &m.data[handle_from_array.idx], true
 }
@@ -231,7 +231,7 @@ fixed_slot_map_get :: #force_inline proc "contextless" (
 		return {}, false
 	}
 
-	handle_from_array := user_handle_to_array_handle(m, handle)
+	handle_from_array := user_handle_get_array_handle_ptr(m, handle)
 
 	return m.data[handle_from_array.idx], true
 }
@@ -264,9 +264,9 @@ generate_new_user_handle :: #force_inline proc "contextless" (
 
 
 // Helper method to convert a user passed Handle to its corresponding one in the Handle array
-// The user Handle index points to it  
+// The user Handle index basically points to it  
 @(private = "file")
-user_handle_to_array_handle :: #force_inline proc "contextless" (
+user_handle_get_array_handle_ptr :: #force_inline proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $HT/Handle),
 	handle: HT,
 ) -> ^HT {
@@ -303,6 +303,7 @@ create_slot :: #force_inline proc "contextless" (
 delete_slot :: #force_inline proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $HT/Handle),
 	handle: ^HT,
+	user_handle: HT,
 ) {
 	m.size -= 1
 
@@ -311,14 +312,17 @@ delete_slot :: #force_inline proc "contextless" (
 	// Same for the erase array, to keep them at the same position in their respective arrays
 	m.erase[handle.idx] = m.erase[m.size]
 
+
 	// Since the erase array contains the index of the correspondant Handle in the Handle array, we just have to change 
 	// the index of the Handle pointed by the erase value to make this same Handle points correctly to its moved data
-	m.handles[m.erase[handle.idx]].idx = m.erase[handle.idx]
+	m.handles[m.erase[handle.idx]].idx = handle.idx
 
-	// Update the free list tail to point to this delete slot
+
+	// Free the handle, makes it the tail of the free list
+	handle.idx = user_handle.idx
+	handle.gen += 1
+
+	// Update the free list tail
 	m.handles[m.free_list_tail].idx = handle.idx
 	m.free_list_tail = handle.idx
-
-	// Increment the generation of the Handle, rendering the old generation invalid
-	handle.gen += 1
 }
