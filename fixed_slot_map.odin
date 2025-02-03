@@ -2,6 +2,12 @@ package slot_map
 
 import "base:intrinsics"
 
+
+// TODO
+// Test all functions
+// Rename delete_handle to remove
+
+
 // Fixed Size Dense Slot Map
 // Of size N ( > 0 ) ! It can't be full, max used slots is N - 1
 // Type T
