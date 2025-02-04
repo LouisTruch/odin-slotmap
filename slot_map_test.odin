@@ -461,6 +461,19 @@ dynamic_slot_map_new_test :: proc(t: ^testing.T) {
 
 
 @(test)
+dynamic_slot_map_new_with_data_test :: proc(t: ^testing.T) {
+	MyKey :: distinct Key(uint, 32, 32)
+
+	slot_map := dynamic_slot_map_make(int, MyKey, 3)
+	defer dynamic_slot_map_delete(&slot_map)
+
+	key1, ok1 := dynamic_slot_map_new_with_data(&slot_map, 09)
+	testing.expect(t, ok1, "Could not create a new Key")
+	testing.expect(t, slot_map.data[0] == 09)
+}
+
+
+@(test)
 dynamic_slot_map_is_valid_test :: proc(t: ^testing.T) {
 	MyKey :: distinct Key(uint, 32, 32)
 
@@ -499,6 +512,21 @@ dynamic_slot_map_remove_test :: proc(t: ^testing.T) {
 
 
 @(test)
+dynamic_slot_map_remove_value_test :: proc(t: ^testing.T) {
+	MyKey :: distinct Key(uint, 32, 32)
+
+	slot_map := dynamic_slot_map_make(int, MyKey, 3)
+	defer dynamic_slot_map_delete(&slot_map)
+
+
+	key := dynamic_slot_map_new_with_data(&slot_map, 09)
+	deleted_value := dynamic_slot_map_remove_value(&slot_map, key)
+	testing.expect(t, deleted_value == 09)
+
+}
+
+
+@(test)
 dynamic_slot_map_set_test :: proc(t: ^testing.T) {
 	MyKey :: distinct Key(uint, 32, 32)
 
@@ -511,4 +539,34 @@ dynamic_slot_map_set_test :: proc(t: ^testing.T) {
 	ok_set := dynamic_slot_map_set(&slot_map, key1, set_value)
 	testing.expect(t, ok_set)
 	testing.expect(t, slot_map.data[0] == set_value)
+}
+
+
+@(test)
+dynamic_slot_map_get_test :: proc(t: ^testing.T) {
+	MyKey :: distinct Key(uint, 32, 32)
+
+	slot_map := dynamic_slot_map_make(int, MyKey, 3)
+	defer dynamic_slot_map_delete(&slot_map)
+
+	key := dynamic_slot_map_new_with_data(&slot_map, 9)
+
+	retrieved_value, ok := dynamic_slot_map_get(&slot_map, key)
+	testing.expect(t, ok)
+	testing.expect(t, retrieved_value == 9)
+}
+
+
+@(test)
+dynamic_slot_map_get_ptr_test :: proc(t: ^testing.T) {
+	MyKey :: distinct Key(uint, 32, 32)
+
+	slot_map := dynamic_slot_map_make(int, MyKey, 3)
+	defer dynamic_slot_map_delete(&slot_map)
+
+	key := dynamic_slot_map_new_with_data(&slot_map, 9)
+
+	retrieved_ptr, ok := dynamic_slot_map_get_ptr(&slot_map, key)
+	testing.expect(t, ok)
+	testing.expect(t, retrieved_ptr == &slot_map.data[0])
 }

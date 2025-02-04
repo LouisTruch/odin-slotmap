@@ -78,8 +78,40 @@ dynamic_slot_map_new :: proc(
 	KeyType,
 	bool,
 ) #optional_ok {
-	if is_slot_map_full(m) {
-		// Re alloc and move the arrays
+	return new_internal(m, growth_factor)
+}
+
+
+@(require_results)
+dynamic_slot_map_new_with_data :: proc(
+	m: ^DynamicSlotMap($T, $KeyType/Key),
+	data: T,
+	growth_factor: f64 = 1.5,
+) -> (
+	user_key: KeyType,
+	ok: bool,
+) #optional_ok {
+	user_key = new_internal(m, growth_factor) or_return
+
+	m.data[m.keys[user_key.idx].idx] = data
+
+	return user_key, true
+}
+
+
+@(private = "file")
+@(require_results)
+new_internal :: proc(
+	m: ^DynamicSlotMap($T, $KeyType/Key),
+	growth_factor: f64 = 1.5,
+) -> (
+	KeyType,
+	bool,
+) {
+	// Means we have only 1 slot left and it will be taken after this call
+	// It's our condition to re-alloc bigger arrays
+	if m.free_list_head == m.free_list_tail {
+		// Move the arrays
 		current_cap := int(m.capacity)
 		new_cap := uint(f64(current_cap) * growth_factor)
 
@@ -119,6 +151,8 @@ dynamic_slot_map_new :: proc(
 		m.capacity = new_cap
 	}
 
+	// Generate the user Key
+	// It points to its associated Key in the Key array and has the same gen
 	user_key := KeyType {
 		idx = m.free_list_head,
 		gen = m.keys[m.free_list_head].gen,
@@ -151,6 +185,35 @@ dynamic_slot_map_remove :: proc(m: ^DynamicSlotMap($T, $KeyType/Key), user_key: 
 
 	key := &m.keys[user_key.idx]
 
+	remove_internal(m, key, user_key)
+
+	return true
+}
+
+
+dynamic_slot_map_remove_value :: proc(
+	m: ^DynamicSlotMap($T, $KeyType/Key),
+	user_key: KeyType,
+) -> (
+	T,
+	bool,
+) #optional_ok {
+	if !dynamic_slot_map_is_valid(m, user_key) {
+		return {}, false
+	}
+
+	key := &m.keys[user_key.idx]
+
+	deleted_data_copy := m.data[key.idx]
+
+	remove_internal(m, key, user_key)
+
+	return deleted_data_copy, true
+}
+
+
+@(private = "file")
+remove_internal :: proc(m: ^DynamicSlotMap($T, $KeyType/Key), key: ^KeyType, user_key: KeyType) {
 	m.size -= 1
 
 	// Overwrite the data of the deleted slot with the data from the last slot
@@ -171,8 +234,6 @@ dynamic_slot_map_remove :: proc(m: ^DynamicSlotMap($T, $KeyType/Key), user_key: 
 	// Update the free list tail
 	m.keys[m.free_list_tail].idx = key.idx
 	m.free_list_tail = key.idx
-
-	return true
 }
 
 
@@ -194,9 +255,45 @@ dynamic_slot_map_set :: proc(
 
 
 @(require_results)
-dynamic_slot_map_is_valid :: proc "contextless" (
-	m: ^DynamicSlotMap($T, $KT/Key),
-	user_key: KT,
+dynamic_slot_map_get :: proc(
+	m: ^DynamicSlotMap($T, $KeyType/Key),
+	user_key: KeyType,
+) -> (
+	T,
+	bool,
+) #optional_ok {
+	if !dynamic_slot_map_is_valid(m, user_key) {
+		return {}, false
+	}
+
+	key := m.keys[user_key.idx]
+
+	return m.data[key.idx], true
+}
+
+
+@(require_results)
+dynamic_slot_map_get_ptr :: proc(
+	m: ^DynamicSlotMap($T, $KeyType/Key),
+	user_key: KeyType,
+) -> (
+	^T,
+	bool,
+) #optional_ok {
+	if !dynamic_slot_map_is_valid(m, user_key) {
+		return nil, false
+	}
+
+	key := m.keys[user_key.idx]
+
+	return &m.data[key.idx], true
+}
+
+
+@(require_results)
+dynamic_slot_map_is_valid :: #force_inline proc "contextless" (
+	m: ^DynamicSlotMap($T, $KeyType/Key),
+	user_key: KeyType,
 ) -> bool #no_bounds_check {
 	// Manual bound checking
 	// Then check if the generation is the same
@@ -204,11 +301,4 @@ dynamic_slot_map_is_valid :: proc "contextless" (
 		!(user_key.idx >= m.capacity || user_key.idx < 0 || user_key.gen == 0) &&
 		user_key.gen == m.keys[user_key.idx].gen \
 	)
-}
-
-
-// If true it means we have to re-alloc and move the data
-@(private = "file")
-is_slot_map_full :: proc(m: ^DynamicSlotMap($K, $KeyType/Key)) -> bool {
-	return m.free_list_head == m.free_list_tail
 }
