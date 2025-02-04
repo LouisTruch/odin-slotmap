@@ -5,7 +5,7 @@ import "core:testing"
 
 
 @(test)
-handle_pack_unpack_test :: proc(t: ^testing.T) {
+key_pack_unpack_test :: proc(t: ^testing.T) {
 	{
 		MyKey :: distinct Key(uint, 32, 32)
 		key: MyKey
@@ -72,7 +72,7 @@ fixed_slot_map_clear_test :: proc(t: ^testing.T) {
 	for i in 0 ..< STRUCT_MAX {
 		cool_struct_array[i].v = i
 		cool_struct_array[i].p = &cool_struct_array[i].v
-		_ = fixed_slot_map_new_handle_value(&slot_map, cool_struct_array[i])
+		_ = fixed_slot_map_new_with_data(&slot_map, cool_struct_array[i])
 	}
 
 	for i in 0 ..< STRUCT_MAX - 1 {
@@ -91,13 +91,13 @@ fixed_slot_map_clear_test :: proc(t: ^testing.T) {
 
 
 @(test)
-fixed_slot_map_insert_test :: proc(t: ^testing.T) {
+fixed_slot_map_new_test :: proc(t: ^testing.T) {
 	N :: 5
 	MyKey :: distinct Key(uint, 32, 32)
 	slot_map: FixedSlotMap(N, int, MyKey)
 	fixed_slot_map_init(&slot_map)
 
-	handle1, ok1 := fixed_slot_map_new_handle_value(&slot_map, 42)
+	handle1, ok1 := fixed_slot_map_new_with_data(&slot_map, 42)
 	testing.expect(t, slot_map.size == 1, "Size should be 1 after first insertion")
 	testing.expect(t, slot_map.free_list_head == 1, "Head should have advanced by one")
 	testing.expect(t, slot_map.free_list_tail == 4, "Tail should not move")
@@ -109,24 +109,24 @@ fixed_slot_map_insert_test :: proc(t: ^testing.T) {
 	// Test filling the slot_map
 	handles: [N - 1]MyKey
 	for i in 1 ..< N - 1 {
-		h, ok := fixed_slot_map_new_handle_value(&slot_map, i * 10)
+		h, ok := fixed_slot_map_new_with_data(&slot_map, i * 10)
 		testing.expect(t, ok, "Insert within N - 1 should succeed")
 		handles[i] = h
 	}
 
 	// Test insertion when full
-	_, ok3 := fixed_slot_map_new_handle_value(&slot_map, 100)
+	_, ok3 := fixed_slot_map_new_with_data(&slot_map, 100)
 	testing.expect(t, !ok3, "Insert when full should fail")
 }
 
 
 @(test)
-fixed_slot_map_insert_value_test :: proc(t: ^testing.T) {
+fixed_slot_map_new_with_data_test :: proc(t: ^testing.T) {
 	N :: 5
 	MyKey :: distinct Key(uint, 32, 32)
 	slot_map := fixed_slot_map_make(N, int, MyKey)
 
-	handle1, _ := fixed_slot_map_new_handle_value(&slot_map, 999)
+	handle1, _ := fixed_slot_map_new_with_data(&slot_map, 999)
 
 	value1, _ := fixed_slot_map_get(&slot_map, handle1)
 
@@ -136,28 +136,40 @@ fixed_slot_map_insert_value_test :: proc(t: ^testing.T) {
 
 
 @(test)
-fixed_slot_map_insert_ptr_test :: proc(t: ^testing.T) {
+fixed_slot_map_new_get_ptr_test :: proc(t: ^testing.T) {
 	N :: 5
 	MyKey :: distinct Key(uint, 32, 32)
 	slot_map := fixed_slot_map_make(N, int, MyKey)
 
-	handle1, ptr1, _ := fixed_slot_map_new_handle_get_ptr(&slot_map)
+	handle1, ptr1, _ := fixed_slot_map_new_get_ptr(&slot_map)
 	ptr1^ = 999
 	testing.expect(t, slot_map.data[0] == 999, "Value not set correctly")
 }
 
 
 @(test)
-fixed_slot_map_delete_test :: proc(t: ^testing.T) {
+fixed_slot_map_set_test :: proc(t: ^testing.T) {
+	N :: 5
+	MyKey :: distinct Key(uint, 32, 32)
+	slot_map := fixed_slot_map_make(N, int, MyKey)
+
+	key, _ := fixed_slot_map_new(&slot_map)
+	fixed_slot_map_set(&slot_map, key, 42)
+	testing.expect(t, slot_map.data[0] == 42)
+}
+
+
+@(test)
+fixed_slot_map_remove_test :: proc(t: ^testing.T) {
 	MyKey :: distinct Key(uint, 32, 32)
 	slot_map: FixedSlotMap(5, int, MyKey)
 	fixed_slot_map_init(&slot_map)
 
-	handle1, _ := fixed_slot_map_new_handle_value(&slot_map, 10)
-	handle2, _ := fixed_slot_map_new_handle_value(&slot_map, 20)
-	handle3, _ := fixed_slot_map_new_handle_value(&slot_map, 30)
+	handle1, _ := fixed_slot_map_new_with_data(&slot_map, 10)
+	handle2, _ := fixed_slot_map_new_with_data(&slot_map, 20)
+	handle3, _ := fixed_slot_map_new_with_data(&slot_map, 30)
 
-	ok := fixed_slot_map_delete_handle(&slot_map, handle1)
+	ok := fixed_slot_map_remove(&slot_map, handle1)
 	testing.expect(t, ok, "Deletion should succeed")
 	testing.expect(t, slot_map.size == 2, "Size should decrease after deletion")
 	// Deleted first handle so the last one gets its slot
@@ -181,22 +193,22 @@ fixed_slot_map_delete_test :: proc(t: ^testing.T) {
 
 
 @(test)
-fixed_slot_map_delete_value_test :: proc(t: ^testing.T) {
+fixed_slot_map_remove_value_test :: proc(t: ^testing.T) {
 	MyKey :: distinct Key(uint, 32, 32)
 	slot_map: FixedSlotMap(5, int, MyKey)
 	fixed_slot_map_init(&slot_map)
 
-	handle1, _ := fixed_slot_map_new_handle_value(&slot_map, 10)
-	handle2, _ := fixed_slot_map_new_handle_value(&slot_map, 20)
-	handle3, _ := fixed_slot_map_new_handle_value(&slot_map, 30)
+	handle1, _ := fixed_slot_map_new_with_data(&slot_map, 10)
+	handle2, _ := fixed_slot_map_new_with_data(&slot_map, 20)
+	handle3, _ := fixed_slot_map_new_with_data(&slot_map, 30)
 
-	value1, ok := fixed_slot_map_delete_handle_value(&slot_map, handle1)
+	value1, ok := fixed_slot_map_remove_value(&slot_map, handle1)
 	testing.expect(t, value1 == 10, "Deleted value is not correct")
 }
 
 
 @(test)
-fixed_slot_map_valid_test :: proc(t: ^testing.T) {
+fixed_slot_map_is_valid_test :: proc(t: ^testing.T) {
 	MyKey :: distinct Key(uint, 32, 32)
 	slot_map: FixedSlotMap(5, int, MyKey)
 	fixed_slot_map_init(&slot_map)
@@ -213,7 +225,7 @@ fixed_slot_map_valid_test :: proc(t: ^testing.T) {
 	)
 
 	// Test generation mismatch
-	handle1, _ := fixed_slot_map_new_handle_value(&slot_map, 42)
+	handle1, _ := fixed_slot_map_new_with_data(&slot_map, 42)
 	invalid_gen_handle := MyKey {
 		idx = handle1.idx,
 		gen = handle1.gen + 1,
@@ -256,10 +268,10 @@ fixed_slot_map_struct_with_ptr_test :: proc(t: ^testing.T) {
 		player := make_entity("Player", 0, 0, 0, 100)
 		enemy := make_entity("Enemy", 10, 0, 10, 50)
 
-		player_handle, ok1 := fixed_slot_map_new_handle_value(&slot_map, player)
+		player_handle, ok1 := fixed_slot_map_new_with_data(&slot_map, player)
 		testing.expect(t, ok1, "Player insertion should succeed")
 
-		enemy_handle, ok2 := fixed_slot_map_new_handle_value(&slot_map, enemy)
+		enemy_handle, ok2 := fixed_slot_map_new_with_data(&slot_map, enemy)
 		testing.expect(t, ok2, "Enemy insertion should succeed")
 
 		// Test accessing and modifying data
@@ -285,11 +297,11 @@ fixed_slot_map_struct_with_ptr_test :: proc(t: ^testing.T) {
 		if enemy_ptr, ok := fixed_slot_map_get_ptr(&slot_map, enemy_handle); ok {
 			destroy_entity(enemy_ptr)
 		}
-		fixed_slot_map_delete_handle(&slot_map, enemy_handle)
+		fixed_slot_map_remove(&slot_map, enemy_handle)
 
 		// Test reuse of slot
 		npc := make_entity("NPC", -5, 0, -5, 30)
-		new_handle, ok3 := fixed_slot_map_new_handle_value(&slot_map, npc)
+		new_handle, ok3 := fixed_slot_map_new_with_data(&slot_map, npc)
 		testing.expect(t, ok3, "Insertion into freed slot should succeed")
 
 		if npc_ptr, ok := fixed_slot_map_get_ptr(&slot_map, new_handle); ok {
@@ -310,16 +322,16 @@ fixed_slot_map_struct_with_ptr_test :: proc(t: ^testing.T) {
 
 
 @(test)
-fixed_slot_map_insert_delete_test :: proc(t: ^testing.T) {
+fixed_slot_map_new_remove_test :: proc(t: ^testing.T) {
 	N :: 4
 	MyKey :: distinct Key(uint, 32, 32)
 	slot_map := fixed_slot_map_make(N, int, MyKey)
 
-	handle1, ok1 := fixed_slot_map_new_handle_value(&slot_map, 10)
-	handle2, ok2 := fixed_slot_map_new_handle_value(&slot_map, 20)
-	handle3, ok3 := fixed_slot_map_new_handle_value(&slot_map, 30)
+	handle1, ok1 := fixed_slot_map_new_with_data(&slot_map, 10)
+	handle2, ok2 := fixed_slot_map_new_with_data(&slot_map, 20)
+	handle3, ok3 := fixed_slot_map_new_with_data(&slot_map, 30)
 	// Slot Map has N - 1 slots so can't use the 4th one
-	handle4, ok4 := fixed_slot_map_new_handle(&slot_map)
+	handle4, ok4 := fixed_slot_map_new(&slot_map)
 	testing.expect(t, ok4 == false, "Should not be able to fill the slot map completly")
 
 	// There Head and Tail should be = 3
@@ -327,24 +339,24 @@ fixed_slot_map_insert_delete_test :: proc(t: ^testing.T) {
 	testing.expect(t, slot_map.free_list_tail == 3)
 
 	// Delete the second slot, so last slot is moved to [1]
-	ok2 = fixed_slot_map_delete_handle(&slot_map, handle2)
+	ok2 = fixed_slot_map_remove(&slot_map, handle2)
 	testing.expect(t, slot_map.data[1] == 30)
 	testing.expect(t, slot_map.free_list_head == 3)
 	testing.expect(t, slot_map.free_list_tail == 1)
 
-	handle4, ok4 = fixed_slot_map_new_handle_value(&slot_map, 40)
+	handle4, ok4 = fixed_slot_map_new_with_data(&slot_map, 40)
 	testing.expect(t, slot_map.data[2] == 40)
 	testing.expect(t, slot_map.free_list_head == 1)
 	testing.expect(t, slot_map.free_list_tail == 1)
 
-	ok1 = fixed_slot_map_delete_handle(&slot_map, handle1)
+	ok1 = fixed_slot_map_remove(&slot_map, handle1)
 	testing.expect(t, slot_map.data[0] == 40)
 	testing.expect(t, slot_map.free_list_tail == 0)
 }
 
 
 @(test)
-fixed_slot_map_random_insert_delete_test :: proc(t: ^testing.T) {
+fixed_slot_map_random_new_remove_test :: proc(t: ^testing.T) {
 	N :: 1000
 	MyKey :: distinct Key(uint, 32, 32)
 	slot_map := fixed_slot_map_make(N, int, MyKey)
@@ -367,7 +379,7 @@ fixed_slot_map_random_insert_delete_test :: proc(t: ^testing.T) {
 
 		switch ope {
 		case .Ins:
-			new_handle, ok := fixed_slot_map_new_handle_value(&slot_map, 0)
+			new_handle, ok := fixed_slot_map_new_with_data(&slot_map, 0)
 			if ok {
 				append(&keys, new_handle)
 
@@ -397,7 +409,7 @@ fixed_slot_map_random_insert_delete_test :: proc(t: ^testing.T) {
 				unordered_remove(&keys, idx)
 
 				old_tail := slot_map.free_list_tail
-				ok := fixed_slot_map_delete_handle(&slot_map, handle)
+				ok := fixed_slot_map_remove(&slot_map, handle)
 				testing.expect(t, ok)
 
 				pointed_handle_idx := handle.idx

@@ -1,28 +1,18 @@
 package slot_map
 
-import "base:intrinsics"
 
-
-// TODO
-// Test all functions
-// Rename delete_handle to remove
-
-
-// Fixed Size Dense Slot Map
-// Of size N ( > 0 ) ! It can't be full, max used slots is N - 1
-// Type T
-// Key of type KT
-// Not protected against gen overflow
-// Uses handle.gen = 0 as error value
-// It makes 0 allocation since the arrays are of fixed size
-// You should be careful about stack overflows if you don't alloc it
-FixedSlotMap :: struct($N: uint, $T: typeid, $KT: typeid) where N > 1 {
+// Fixed Size Dense Slot Map of size N ( > 0 ) ! It can't be full, max used slots is N - 1 \
+// Type T \
+// Not protected against gen overflow \
+// Uses key.gen = 0 as error value \
+// It makes 0 allocation so you should be careful about stack overflows if you don't alloc it on the heap
+FixedSlotMap :: struct($N: uint, $T: typeid, $KeyType: typeid) where N > 1 {
 	size:           uint,
 	free_list_head: uint,
 	free_list_tail: uint,
 	// Array of every possible Key
-	// Unused Handles are used as an in place free list
-	keys:           [N]KT,
+	// Unused Keys are used as an in place free list
+	keys:           [N]KeyType,
 	// Used to keep track of the data of a given Key when deleting
 	erase:          [N]uint,
 	data:           [N]T,
@@ -79,7 +69,7 @@ fixed_slot_map_clear :: #force_inline proc "contextless" (m: ^FixedSlotMap($N, $
 // Asks the slot map for a new Key
 // Return said Key and a boolean indicating the success or not of the operation
 @(require_results)
-fixed_slot_map_new_handle :: proc "contextless" (
+fixed_slot_map_new :: proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $KT/Key),
 ) -> (
 	KT,
@@ -100,7 +90,7 @@ fixed_slot_map_new_handle :: proc "contextless" (
 // Asks the slot map for a new Key and put the data you pass in the slot map
 // Return said Key and a boolean indicating the success or not of the operation
 @(require_results)
-fixed_slot_map_new_handle_value :: proc "contextless" (
+fixed_slot_map_new_with_data :: proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $KT/Key),
 	data: T,
 ) -> (
@@ -125,7 +115,7 @@ fixed_slot_map_new_handle_value :: proc "contextless" (
 // Asks the slot map for a new Key
 // Return said Key, a pointer to the beginning of data in the slot map and a boolean indicating the success or not of the operation
 @(require_results)
-fixed_slot_map_new_handle_get_ptr :: proc "contextless" (
+fixed_slot_map_new_get_ptr :: proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $KT/Key),
 ) -> (
 	KT,
@@ -148,7 +138,7 @@ fixed_slot_map_new_handle_get_ptr :: proc "contextless" (
 // The Key might has already been given back
 // The return value confirms the success of the deletion, or not
 // ! This makes data move in the slot map, old data is not cleared !
-fixed_slot_map_delete_handle :: proc "contextless" (
+fixed_slot_map_remove :: proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $KT/Key),
 	user_key: KT,
 ) -> bool {
@@ -168,7 +158,7 @@ fixed_slot_map_delete_handle :: proc "contextless" (
 // The Key might has already been given back
 // Returns a copy of the deleted data, and the success or not of the operation
 // ! This makes data move in the slot map, old data is not cleared !
-fixed_slot_map_delete_handle_value :: proc "contextless" (
+fixed_slot_map_remove_value :: proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $KT/Key),
 	user_key: KT,
 ) -> (
@@ -203,9 +193,9 @@ fixed_slot_map_get :: #force_inline proc "contextless" (
 		return {}, false
 	}
 
-	handle_from_array := user_key_get_array_key_ptr(m, user_key)
+	key_from_array := user_key_get_array_key_ptr(m, user_key)
 
-	return m.data[handle_from_array.idx], true
+	return m.data[key_from_array.idx], true
 }
 
 
@@ -276,7 +266,7 @@ is_slot_map_full :: #force_inline proc "contextless" (m: ^FixedSlotMap($N, $T, $
 }
 
 
-// Generate user handle (! Not the same as the handle in the Indices array !)
+// Generate user Key (! Not the same as the Key in the Indices array !)
 // Its index should point to the Key in the Key array
 // Its gen should match the gen from the Key in array
 @(private = "file")
@@ -312,7 +302,7 @@ create_slot :: #force_inline proc "contextless" (
 	// We now make it point to the last slot of the data array
 	new_slot.idx = m.size
 
-	// Save the index position of the Key in the Handles array in the erase array
+	// Save the index position of the Key in the Keys array in the erase array
 	m.erase[m.size] = user_key.idx
 
 	// Update the free head list to point to the next free slot in the Key array
@@ -342,7 +332,7 @@ delete_slot :: #force_inline proc "contextless" (
 	m.keys[m.erase[key.idx]].idx = key.idx
 
 
-	// Free the handle, makes it the tail of the free list
+	// Free the key, makes it the tail of the free list
 	key.idx = user_key.idx
 	key.gen += 1
 
