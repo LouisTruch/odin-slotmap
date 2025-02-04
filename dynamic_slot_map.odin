@@ -1,7 +1,6 @@
 package slot_map
 
 import "base:runtime"
-import "core:fmt"
 import "core:mem"
 
 
@@ -73,19 +72,19 @@ dynamic_slot_map_delete :: #force_inline proc(m: ^DynamicSlotMap($T, $KeyType/Ke
 // This should only fails when there is an Allocation Error \
 // Operation is O(1) unless the Slot Map has to realloc \
 @(require_results)
-dynamic_slot_map_new :: proc(
+dynamic_slot_map_insert :: proc(
 	m: ^DynamicSlotMap($T, $KeyType/Key),
 	growth_factor: f64 = 1.5,
 ) -> (
 	KeyType,
 	bool,
 ) #optional_ok {
-	return new_internal(m, growth_factor)
+	return insert_internal(m, growth_factor)
 }
 
 
 @(require_results)
-dynamic_slot_map_new_with_data :: proc(
+dynamic_slot_map_insert_set :: proc(
 	m: ^DynamicSlotMap($T, $KeyType/Key),
 	data: T,
 	growth_factor: f64 = 1.5,
@@ -93,7 +92,7 @@ dynamic_slot_map_new_with_data :: proc(
 	user_key: KeyType,
 	ok: bool,
 ) #optional_ok {
-	user_key = new_internal(m, growth_factor) or_return
+	user_key = insert_internal(m, growth_factor) or_return
 
 	m.data[m.keys[user_key.idx].idx] = data
 
@@ -101,9 +100,24 @@ dynamic_slot_map_new_with_data :: proc(
 }
 
 
+@(require_results)
+dynamic_slot_map_insert_get_ptr :: proc(
+	m: ^DynamicSlotMap($T, $KeyType/Key),
+	growth_factor: f64 = 1.5,
+) -> (
+	user_key: KeyType,
+	ptr: ^T,
+	ok: bool,
+) {
+	user_key = insert_internal(m, growth_factor) or_return
+
+	return user_key, &m.data[m.size - 1], true
+}
+
+
 @(private = "file")
 @(require_results)
-new_internal :: #force_inline proc(
+insert_internal :: #force_inline proc(
 	m: ^DynamicSlotMap($T, $KeyType/Key),
 	growth_factor: f64 = 1.5,
 ) -> (

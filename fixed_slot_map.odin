@@ -69,7 +69,7 @@ fixed_slot_map_clear :: #force_inline proc "contextless" (m: ^FixedSlotMap($N, $
 // Asks the slot map for a new Key
 // Return said Key and a boolean indicating the success or not of the operation
 @(require_results)
-fixed_slot_map_new :: proc "contextless" (
+fixed_slot_map_insert :: proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $KT/Key),
 ) -> (
 	KT,
@@ -90,7 +90,7 @@ fixed_slot_map_new :: proc "contextless" (
 // Asks the slot map for a new Key and put the data you pass in the slot map
 // Return said Key and a boolean indicating the success or not of the operation
 @(require_results)
-fixed_slot_map_new_with_data :: proc "contextless" (
+fixed_slot_map_insert_set :: proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $KT/Key),
 	data: T,
 ) -> (
@@ -115,7 +115,7 @@ fixed_slot_map_new_with_data :: proc "contextless" (
 // Asks the slot map for a new Key
 // Return said Key, a pointer to the beginning of data in the slot map and a boolean indicating the success or not of the operation
 @(require_results)
-fixed_slot_map_new_get_ptr :: proc "contextless" (
+fixed_slot_map_insert_get_ptr :: proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $KT/Key),
 ) -> (
 	KT,
