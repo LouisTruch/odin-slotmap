@@ -5,6 +5,9 @@ import "core:fmt"
 import "core:mem"
 
 
+// TODO Allow explicit passing of allocator ? To be able to make all the procs "contextless"
+
+
 // Dynamic Dense Slot Map \
 // Its internal arrays are always on the heap \
 // It can only grow and never shrinks \
@@ -20,7 +23,6 @@ DynamicSlotMap :: struct($T: typeid, $KeyType: typeid) {
 }
 
 
-// TODO Allow explicit passing of allocator ?
 @(require_results)
 dynamic_slot_map_make :: #force_inline proc(
 	$T: typeid,
@@ -101,7 +103,7 @@ dynamic_slot_map_new_with_data :: proc(
 
 @(private = "file")
 @(require_results)
-new_internal :: proc(
+new_internal :: #force_inline proc(
 	m: ^DynamicSlotMap($T, $KeyType/Key),
 	growth_factor: f64 = 1.5,
 ) -> (
@@ -178,7 +180,10 @@ new_internal :: proc(
 }
 
 
-dynamic_slot_map_remove :: proc(m: ^DynamicSlotMap($T, $KeyType/Key), user_key: KeyType) -> bool {
+dynamic_slot_map_remove :: proc "contextless" (
+	m: ^DynamicSlotMap($T, $KeyType/Key),
+	user_key: KeyType,
+) -> bool {
 	if !dynamic_slot_map_is_valid(m, user_key) {
 		return false
 	}
@@ -191,7 +196,7 @@ dynamic_slot_map_remove :: proc(m: ^DynamicSlotMap($T, $KeyType/Key), user_key: 
 }
 
 
-dynamic_slot_map_remove_value :: proc(
+dynamic_slot_map_remove_value :: proc "contextless" (
 	m: ^DynamicSlotMap($T, $KeyType/Key),
 	user_key: KeyType,
 ) -> (
@@ -213,7 +218,11 @@ dynamic_slot_map_remove_value :: proc(
 
 
 @(private = "file")
-remove_internal :: proc(m: ^DynamicSlotMap($T, $KeyType/Key), key: ^KeyType, user_key: KeyType) {
+remove_internal :: #force_inline proc "contextless" (
+	m: ^DynamicSlotMap($T, $KeyType/Key),
+	key: ^KeyType,
+	user_key: KeyType,
+) {
 	m.size -= 1
 
 	// Overwrite the data of the deleted slot with the data from the last slot
@@ -237,7 +246,7 @@ remove_internal :: proc(m: ^DynamicSlotMap($T, $KeyType/Key), key: ^KeyType, use
 }
 
 
-dynamic_slot_map_set :: proc(
+dynamic_slot_map_set :: #force_inline proc "contextless" (
 	m: ^DynamicSlotMap($T, $KeyType/Key),
 	user_key: KeyType,
 	data: T,
@@ -255,7 +264,7 @@ dynamic_slot_map_set :: proc(
 
 
 @(require_results)
-dynamic_slot_map_get :: proc(
+dynamic_slot_map_get :: #force_inline proc "contextless" (
 	m: ^DynamicSlotMap($T, $KeyType/Key),
 	user_key: KeyType,
 ) -> (
@@ -273,7 +282,7 @@ dynamic_slot_map_get :: proc(
 
 
 @(require_results)
-dynamic_slot_map_get_ptr :: proc(
+dynamic_slot_map_get_ptr :: #force_inline proc "contextless" (
 	m: ^DynamicSlotMap($T, $KeyType/Key),
 	user_key: KeyType,
 ) -> (
