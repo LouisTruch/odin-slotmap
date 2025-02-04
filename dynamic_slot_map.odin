@@ -130,6 +130,7 @@ insert_internal :: #force_inline proc(
 		// Move the arrays
 		current_cap := int(m.capacity)
 		new_cap := uint(f64(current_cap) * growth_factor)
+		m.capacity = new_cap
 
 		if new_keys, error := make([]KeyType, uint(new_cap)); error != .None {
 			return KeyType{}, false
@@ -163,8 +164,6 @@ insert_internal :: #force_inline proc(
 			delete(m.erase)
 			m.erase = new_erase
 		}
-
-		m.capacity = new_cap
 	}
 
 	// Generate the user Key

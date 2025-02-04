@@ -37,16 +37,14 @@ fixed_slot_map_make :: #force_inline proc "contextless" (
 fixed_slot_map_init :: #force_inline proc "contextless" (m: ^FixedSlotMap($N, $T, $KT/Key)) {
 	m.size = 0
 
+	m.free_list_head = 0
+	m.free_list_tail = N - 1
 	i: uint
 	for &key in m.keys {
 		key.idx = i + 1
 		key.gen = 1
 		i += 1
 	}
-
-	m.free_list_head = 0
-	m.free_list_tail = N - 1
-
 	// Last element points on itself 
 	m.keys[m.free_list_tail].idx = N - 1
 
@@ -64,15 +62,7 @@ fixed_slot_map_insert :: proc "contextless" (
 	KT,
 	bool,
 ) #optional_ok {
-	if is_slot_map_full(m) {
-		return KT{}, false
-	}
-
-	user_key := generate_new_user_key(m)
-
-	create_slot(m, &user_key)
-
-	return user_key, true
+	return insert_internal(m)
 }
 
 
@@ -83,19 +73,12 @@ fixed_slot_map_insert_set :: proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $KT/Key),
 	data: T,
 ) -> (
-	KT,
-	bool,
+	user_key: KT,
+	ok: bool,
 ) #optional_ok {
-	if is_slot_map_full(m) {
-		return KT{}, false
-	}
+	user_key = insert_internal(m) or_return
 
-	user_key := generate_new_user_key(m)
-
-	// Copy the passed data in the data array
-	m.data[m.size] = data
-
-	create_slot(m, &user_key)
+	m.data[m.keys[user_key.idx].idx] = data
 
 	return user_key, true
 }
@@ -107,19 +90,56 @@ fixed_slot_map_insert_set :: proc "contextless" (
 fixed_slot_map_insert_get_ptr :: proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $KT/Key),
 ) -> (
-	KT,
-	^T,
-	bool,
+	user_key: KT,
+	ptr: ^T,
+	ok: bool,
 ) {
-	if is_slot_map_full(m) {
-		return KT{}, nil, false
-	}
-
-	user_key := generate_new_user_key(m)
-
-	create_slot(m, &user_key)
+	user_key = insert_internal(m) or_return
 
 	return user_key, &m.data[m.size - 1], true
+}
+
+
+@(private = "file")
+@(require_results)
+insert_internal :: #force_inline proc "contextless" (
+	m: ^FixedSlotMap($N, $T, $KeyType/Key),
+) -> (
+	KeyType,
+	bool,
+) {
+	// Means there is only one Slot left and we always keep at least one Slot free
+	// So we cannot return a valid Key
+	if m.free_list_head == m.free_list_tail {
+		return {}, false
+	}
+
+
+	// Generate user Key (! Not the same as the Key in the Indices array !)
+	// Its index should point to the Key in the Key array
+	// Its gen should match the gen from the Key in array
+	user_key := KeyType {
+		idx = m.free_list_head,
+		gen = m.keys[m.free_list_head].gen,
+	}
+
+	// Save the index of the index of the current head
+	next_free_slot_idx := m.keys[m.free_list_head].idx
+
+	// Use the Key slot pointed by the free list head
+	new_slot := &m.keys[m.free_list_head]
+	// We now make it point to the last slot of the data array
+	new_slot.idx = m.size
+
+	// Save the index position of the Key in the Keys array in the erase array
+	m.erase[m.size] = user_key.idx
+
+	// Update the free head list to point to the next free slot in the Key array
+	m.free_list_head = next_free_slot_idx
+
+	m.size += 1
+
+	return user_key, true
 }
 
 
@@ -135,9 +155,9 @@ fixed_slot_map_remove :: proc "contextless" (
 		return false
 	}
 
-	key := user_key_get_array_key_ptr(m, user_key)
+	key := &m.keys[user_key.idx]
 
-	delete_slot(m, key, user_key)
+	remove_internal(m, key, user_key)
 
 	return true
 }
@@ -158,155 +178,22 @@ fixed_slot_map_remove_value :: proc "contextless" (
 		return {}, false
 	}
 
-	key := user_key_get_array_key_ptr(m, user_key)
+	key := &m.keys[user_key.idx]
 
 	// Make a copy of the deleted data before overwriting it
 	deleted_data_copy := m.data[key.idx]
 
-	delete_slot(m, key, user_key)
+	remove_internal(m, key, user_key)
 
 	return deleted_data_copy, true
 }
 
 
-// If the Key is valid, returns a copy of the data
-@(require_results)
-fixed_slot_map_get :: #force_inline proc "contextless" (
-	m: ^FixedSlotMap($N, $T, $KT/Key),
-	user_key: KT,
-) -> (
-	T,
-	bool,
-) #optional_ok {
-	if !fixed_slot_map_is_valid(m, user_key) {
-		return {}, false
-	}
-
-	key_from_array := user_key_get_array_key_ptr(m, user_key)
-
-	return m.data[key_from_array.idx], true
-}
-
-
-// If the Key is valid, returns a ptr to the data
-@(require_results)
-fixed_slot_map_get_ptr :: #force_inline proc "contextless" (
-	m: ^FixedSlotMap($N, $T, $KT/Key),
-	user_key: KT,
-) -> (
-	^T,
-	bool,
-) #optional_ok {
-	if !fixed_slot_map_is_valid(m, user_key) {
-		return nil, false
-	}
-
-	key_from_array := user_key_get_array_key_ptr(m, user_key)
-
-	return &m.data[key_from_array.idx], true
-}
-
-
-fixed_slot_map_set :: proc "contextless" (
-	m: ^FixedSlotMap($N, $T, $KT/Key),
-	user_key: KT,
-	new_data: T,
-) -> bool {
-	if !fixed_slot_map_is_valid(m, user_key) {
-		return false
-	}
-
-	key_from_array := user_key_get_array_key_ptr(m, user_key)
-
-	m.data[key_from_array.idx] = new_data
-
-	return true
-}
-
-
-// Check if the user Key is valid
-@(require_results)
-fixed_slot_map_is_valid :: #force_inline proc "contextless" (
-	m: ^FixedSlotMap($N, $T, $KT/Key),
-	user_key: KT,
-) -> bool #no_bounds_check {
-	// Manual bound checking
-	// Then check if the generation is the same
-	return(
-		!(user_key.idx >= N || user_key.idx < 0 || user_key.gen == 0) &&
-		user_key.gen == m.keys[user_key.idx].gen \
-	)
-}
-
-// Returns number of used slots
-@(require_results)
-fixed_slot_map_len :: #force_inline proc "contextless" (
-	m: ^FixedSlotMap($N, $T, $KT/Key),
-) -> uint {
-	return m.size
-}
-
-
 @(private = "file")
-is_slot_map_full :: #force_inline proc "contextless" (m: ^FixedSlotMap($N, $T, $KT/Key)) -> bool {
-	// Means there is only 1 slot left in the free list
-	// We keep 1 slot free to not mess the free list
-	return m.free_list_head == m.free_list_tail
-}
-
-
-// Generate user Key (! Not the same as the Key in the Indices array !)
-// Its index should point to the Key in the Key array
-// Its gen should match the gen from the Key in array
-@(private = "file")
-generate_new_user_key :: #force_inline proc "contextless" (
-	m: ^FixedSlotMap($N, $T, $KT/Key),
-) -> KT {
-	return KT{idx = m.free_list_head, gen = m.keys[m.free_list_head].gen}
-}
-
-
-// Helper method to convert a user passed Key to its corresponding one in the Key array
-// The user Key index basically points to it  
-@(private = "file")
-user_key_get_array_key_ptr :: #force_inline proc "contextless" (
-	m: ^FixedSlotMap($N, $T, $KT/Key),
-	key: KT,
-) -> ^KT {
-	return &m.keys[key.idx]
-}
-
-
-// Helper method to create a slot
-@(private = "file")
-create_slot :: #force_inline proc "contextless" (
-	m: ^FixedSlotMap($N, $T, $KT/Key),
-	user_key: ^KT,
-) {
-	// Save the index of the index of the current head
-	next_free_slot_idx := m.keys[m.free_list_head].idx
-
-	// Use the Key slot pointed by the free list head
-	new_slot := &m.keys[m.free_list_head]
-	// We now make it point to the last slot of the data array
-	new_slot.idx = m.size
-
-	// Save the index position of the Key in the Keys array in the erase array
-	m.erase[m.size] = user_key.idx
-
-	// Update the free head list to point to the next free slot in the Key array
-	m.free_list_head = next_free_slot_idx
-
-	m.size += 1
-}
-
-
-// Helper method to delete a slot
-@(private = "file")
-delete_slot :: #force_inline proc "contextless" (
-	m: ^FixedSlotMap($N, $T, $KT/Key),
-	key: ^KT,
-	user_key: KT,
+remove_internal :: #force_inline proc "contextless" (
+	m: ^FixedSlotMap($N, $T, $KeyType/Key),
+	key: ^KeyType,
+	user_key: KeyType,
 ) {
 	m.size -= 1
 
@@ -328,4 +215,74 @@ delete_slot :: #force_inline proc "contextless" (
 	// Update the free list tail
 	m.keys[m.free_list_tail].idx = key.idx
 	m.free_list_tail = key.idx
+}
+
+
+// If the Key is valid, returns a copy of the data
+@(require_results)
+fixed_slot_map_get :: #force_inline proc "contextless" (
+	m: ^FixedSlotMap($N, $T, $KT/Key),
+	user_key: KT,
+) -> (
+	T,
+	bool,
+) #optional_ok {
+	if !fixed_slot_map_is_valid(m, user_key) {
+		return {}, false
+	}
+
+	key := &m.keys[user_key.idx]
+
+	return m.data[key.idx], true
+}
+
+
+// If the Key is valid, returns a ptr to the data
+@(require_results)
+fixed_slot_map_get_ptr :: #force_inline proc "contextless" (
+	m: ^FixedSlotMap($N, $T, $KT/Key),
+	user_key: KT,
+) -> (
+	^T,
+	bool,
+) #optional_ok {
+	if !fixed_slot_map_is_valid(m, user_key) {
+		return nil, false
+	}
+
+	key := &m.keys[user_key.idx]
+
+	return &m.data[key.idx], true
+}
+
+
+fixed_slot_map_set :: proc "contextless" (
+	m: ^FixedSlotMap($N, $T, $KT/Key),
+	user_key: KT,
+	new_data: T,
+) -> bool {
+	if !fixed_slot_map_is_valid(m, user_key) {
+		return false
+	}
+
+	key := &m.keys[user_key.idx]
+
+	m.data[key.idx] = new_data
+
+	return true
+}
+
+
+// Check if the user Key is valid
+@(require_results)
+fixed_slot_map_is_valid :: #force_inline proc "contextless" (
+	m: ^FixedSlotMap($N, $T, $KT/Key),
+	user_key: KT,
+) -> bool #no_bounds_check {
+	// Manual bound checking
+	// Then check if the generation is the same
+	return(
+		!(user_key.idx >= N || user_key.idx < 0 || user_key.gen == 0) &&
+		user_key.gen == m.keys[user_key.idx].gen \
+	)
 }
