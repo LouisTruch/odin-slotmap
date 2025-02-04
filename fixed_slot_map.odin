@@ -33,7 +33,10 @@ fixed_slot_map_make :: #force_inline proc "contextless" (
 }
 
 
+// Can also be used to reset the Slot Map
 fixed_slot_map_init :: #force_inline proc "contextless" (m: ^FixedSlotMap($N, $T, $KT/Key)) {
+	m.size = 0
+
 	i: uint
 	for &key in m.keys {
 		key.idx = i + 1
@@ -47,22 +50,8 @@ fixed_slot_map_init :: #force_inline proc "contextless" (m: ^FixedSlotMap($N, $T
 	// Last element points on itself 
 	m.keys[m.free_list_tail].idx = N - 1
 
-	m.erase = 0
-}
-
-
-fixed_slot_map_clear :: #force_inline proc "contextless" (m: ^FixedSlotMap($N, $T, $KT/Key)) {
-	m.size = 0
-
-	i: uint
-	for &key in m.keys {
-		key.idx = i + 1
-		key.gen = 1
-		i += 1
-	}
-
-	m.erase = 0
 	m.data = {}
+	m.erase = 0
 }
 
 

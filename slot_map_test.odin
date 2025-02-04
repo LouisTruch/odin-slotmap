@@ -4,7 +4,7 @@ import "core:math/rand"
 import "core:testing"
 
 
-/// FIXED SLOT MAP
+/// KEY
 @(test)
 key_pack_unpack_test :: proc(t: ^testing.T) {
 	{
@@ -34,6 +34,7 @@ key_pack_unpack_test :: proc(t: ^testing.T) {
 }
 
 
+/// FIXED SLOT MAP
 @(test)
 fixed_slot_map_make_test :: proc(t: ^testing.T) {
 	N :: 5
@@ -52,41 +53,6 @@ fixed_slot_map_make_test :: proc(t: ^testing.T) {
 		} else {
 			testing.expect(t, key.idx == uint(i), "Last handle should point to itself")
 		}
-	}
-}
-
-
-@(test)
-fixed_slot_map_clear_test :: proc(t: ^testing.T) {
-	CoolStruct :: struct {
-		v: int,
-		p: ^int,
-	}
-	HandleCoolStruct :: distinct Key(uint, 32, 32)
-
-	STRUCT_MAX :: 6
-
-	slot_map: FixedSlotMap(STRUCT_MAX, CoolStruct, HandleCoolStruct)
-	fixed_slot_map_init(&slot_map)
-
-	cool_struct_array: [STRUCT_MAX]CoolStruct
-	for i in 0 ..< STRUCT_MAX {
-		cool_struct_array[i].v = i
-		cool_struct_array[i].p = &cool_struct_array[i].v
-		_ = fixed_slot_map_insert_set(&slot_map, cool_struct_array[i])
-	}
-
-	for i in 0 ..< STRUCT_MAX - 1 {
-		testing.expect(t, slot_map.data[i].v == cool_struct_array[i].v)
-		testing.expect(t, slot_map.data[i].p == cool_struct_array[i].p)
-	}
-
-	fixed_slot_map_clear(&slot_map)
-	testing.expect(t, slot_map.size == 0)
-
-	for i in 0 ..< STRUCT_MAX - 1 {
-		testing.expect(t, slot_map.data[i].v == 0)
-		testing.expect(t, slot_map.data[i].p == nil)
 	}
 }
 
