@@ -4,6 +4,7 @@ import "core:math/rand"
 import "core:testing"
 
 
+/// FIXED SLOT MAP
 @(test)
 key_pack_unpack_test :: proc(t: ^testing.T) {
 	{
@@ -418,4 +419,96 @@ fixed_slot_map_random_new_remove_test :: proc(t: ^testing.T) {
 			}
 		}
 	}
+}
+
+import "core:log"
+
+/// DYNAMIC SLOT MAP
+@(test)
+dynamic_slot_map_make_test :: proc(t: ^testing.T) {
+	CoolStruct :: struct {
+		x, y: int,
+	}
+	CoolKey :: distinct Key(uint, 32, 32)
+
+	initial_cap: uint = 5
+	slot_map := dynamic_slot_map_make(CoolStruct, CoolKey, initial_cap)
+	defer dynamic_slot_map_delete(&slot_map)
+
+	testing.expect(t, slot_map.size == 0)
+	testing.expect(t, slot_map.free_list_head == 0, "Free list head should start at 0")
+	testing.expect(t, slot_map.free_list_tail == 4, "Free list tail should be N-1")
+	testing.expect(t, len(slot_map.data) == int(initial_cap))
+	testing.expect(t, len(slot_map.keys) == int(initial_cap))
+	testing.expect(t, len(slot_map.erase) == int(initial_cap))
+}
+
+
+@(test)
+dynamic_slot_map_new_test :: proc(t: ^testing.T) {
+	MyKey :: distinct Key(uint, 32, 32)
+
+	slot_map := dynamic_slot_map_make(int, MyKey, 3)
+	defer dynamic_slot_map_delete(&slot_map)
+
+	key1, ok1 := dynamic_slot_map_new(&slot_map)
+	testing.expect(t, ok1, "Could not create a new Key")
+
+	key2 := dynamic_slot_map_new(&slot_map)
+	key3 := dynamic_slot_map_new(&slot_map, growth_factor = 2)
+	testing.expect(t, len(slot_map.keys) == 6, "Did not re alloc properly")
+}
+
+
+@(test)
+dynamic_slot_map_is_valid_test :: proc(t: ^testing.T) {
+	MyKey :: distinct Key(uint, 32, 32)
+
+	slot_map := dynamic_slot_map_make(int, MyKey, 3)
+	defer dynamic_slot_map_delete(&slot_map)
+
+	key1 := dynamic_slot_map_new(&slot_map)
+	ok := dynamic_slot_map_is_valid(&slot_map, key1)
+	testing.expect(t, ok, "Key should be valid")
+
+	key1.gen = 0
+	ok = dynamic_slot_map_is_valid(&slot_map, key1)
+	testing.expect(t, ok == false, "Key should not be valid, gen = 0")
+
+	key1.gen = 1
+	key1.idx = 10
+	ok = dynamic_slot_map_is_valid(&slot_map, key1)
+	testing.expect(t, ok == false, "Key should not be valid, idx > slot map capacity")
+}
+
+
+@(test)
+dynamic_slot_map_remove_test :: proc(t: ^testing.T) {
+	MyKey :: distinct Key(uint, 32, 32)
+
+	slot_map := dynamic_slot_map_make(int, MyKey, 3)
+	defer dynamic_slot_map_delete(&slot_map)
+
+
+	key1 := dynamic_slot_map_new(&slot_map)
+	ok_del := dynamic_slot_map_remove(&slot_map, key1)
+	testing.expect(t, ok_del, "Could not remove")
+	testing.expect(t, slot_map.free_list_tail == 0)
+	testing.expect(t, slot_map.keys[0].idx == 0)
+}
+
+
+@(test)
+dynamic_slot_map_set_test :: proc(t: ^testing.T) {
+	MyKey :: distinct Key(uint, 32, 32)
+
+	slot_map := dynamic_slot_map_make(int, MyKey, 3)
+	defer dynamic_slot_map_delete(&slot_map)
+
+
+	key1 := dynamic_slot_map_new(&slot_map)
+	set_value: int = 4
+	ok_set := dynamic_slot_map_set(&slot_map, key1, set_value)
+	testing.expect(t, ok_set)
+	testing.expect(t, slot_map.data[0] == set_value)
 }

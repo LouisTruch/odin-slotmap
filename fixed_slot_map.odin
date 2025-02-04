@@ -2,11 +2,11 @@ package slot_map
 
 
 // Fixed Size Dense Slot Map of size N ( > 0 ) ! It can't be full, max used slots is N - 1 \
-// Type T \
 // Not protected against gen overflow \
 // Uses key.gen = 0 as error value \
 // It makes 0 allocation so you should be careful about stack overflows if you don't alloc it on the heap
 FixedSlotMap :: struct($N: uint, $T: typeid, $KeyType: typeid) where N > 1 {
+	// Used for itering on the dense part of the data array
 	size:           uint,
 	free_list_head: uint,
 	free_list_tail: uint,
@@ -218,7 +218,7 @@ fixed_slot_map_get_ptr :: #force_inline proc "contextless" (
 }
 
 
-fixed_slot_map_set :: #force_inline proc "contextless" (
+fixed_slot_map_set :: proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $KT/Key),
 	user_key: KT,
 	new_data: T,

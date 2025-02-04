@@ -1,16 +1,26 @@
 package slot_map
 
+import "base:runtime"
+import "core:fmt"
+import "core:mem"
 
+
+// Dynamic Dense Slot Map \
+// Its internal arrays are always on the heap \
+// It can only grow and never shrinks \
+// Uses key.gen = 0 as error value 
 DynamicSlotMap :: struct($T: typeid, $KeyType: typeid) {
 	size:           uint,
+	capacity:       uint,
 	free_list_head: uint,
 	free_list_tail: uint,
-	keys:           [dynamic]KeyType,
-	data:           [dynamic]T,
-	erase:          [dynamic]uint,
+	keys:           []KeyType,
+	data:           []T,
+	erase:          []uint,
 }
 
 
+// TODO Allow explicit passing of allocator ?
 @(require_results)
 dynamic_slot_map_make :: #force_inline proc(
 	$T: typeid,
@@ -18,7 +28,187 @@ dynamic_slot_map_make :: #force_inline proc(
 	initial_cap: uint,
 ) -> (
 	slot_map: DynamicSlotMap(T, KeyType),
-) {
+	ok: bool,
+) #optional_ok {
+	alloc_error: runtime.Allocator_Error
 
-	return slot_map
+	if slot_map.keys, alloc_error = make([]KeyType, initial_cap); alloc_error != .None {
+		return slot_map, false
+	}
+	if slot_map.data, alloc_error = make([]T, initial_cap); alloc_error != .None {
+		return slot_map, false
+	}
+	if slot_map.erase, alloc_error = make([]uint, initial_cap); alloc_error != .None {
+		return slot_map, false
+	}
+
+	slot_map.capacity = initial_cap
+
+	for i: uint = 0; i < initial_cap; i += 1 {
+		slot_map.keys[i].idx = i + 1
+		slot_map.keys[i].gen = 1
+	}
+
+	slot_map.free_list_head = 0
+	slot_map.free_list_tail = initial_cap - 1
+
+	// Last element points on itself 
+	slot_map.keys[slot_map.free_list_tail].idx = initial_cap - 1
+
+	return slot_map, true
+}
+
+
+// TODO Add return value to see if delete worked
+dynamic_slot_map_delete :: #force_inline proc(m: ^DynamicSlotMap($T, $KeyType/Key)) {
+	delete(m.keys)
+	delete(m.data)
+	delete(m.erase)
+}
+
+
+// Try and get a Slot, returning a Key to this slot \
+// This should only fails when there is an Allocation Error \
+// Operation is O(1) unless the Slot Map has to realloc \
+@(require_results)
+dynamic_slot_map_new :: proc(
+	m: ^DynamicSlotMap($T, $KeyType/Key),
+	growth_factor: f64 = 1.5,
+) -> (
+	KeyType,
+	bool,
+) #optional_ok {
+	if is_slot_map_full(m) {
+		// Re alloc and move the arrays
+		current_cap := int(m.capacity)
+		new_cap := uint(f64(current_cap) * growth_factor)
+
+		if new_keys, error := make([]KeyType, uint(new_cap)); error != .None {
+			return KeyType{}, false
+		} else {
+			mem.copy(&new_keys[0], &m.keys[0], current_cap * size_of(KeyType))
+			delete(m.keys)
+			m.keys = new_keys
+
+			// Rebuild the free list starting from the head
+			for i := m.free_list_head; i < new_cap; i += 1 {
+				new_keys[i].idx = i + 1
+				new_keys[i].gen = 1
+			}
+
+			m.free_list_tail = new_cap - 1
+			m.keys[m.free_list_tail].idx = new_cap - 1
+		}
+
+		if new_data, error := make([]T, uint(new_cap)); error != .None {
+			return KeyType{}, false
+		} else {
+			mem.copy(&new_data[0], &m.data[0], current_cap * size_of(T))
+			delete(m.data)
+			m.data = new_data
+		}
+
+		if new_erase, error := make([]uint, uint(new_cap)); error != .None {
+			return KeyType{}, false
+		} else {
+			mem.copy(&new_erase[0], &m.erase[0], current_cap * size_of(uint))
+			delete(m.erase)
+			m.erase = new_erase
+		}
+
+		m.capacity = new_cap
+	}
+
+	user_key := KeyType {
+		idx = m.free_list_head,
+		gen = m.keys[m.free_list_head].gen,
+	}
+
+	// Save the index of the index of the current head
+	next_free_slot_idx := m.keys[m.free_list_head].idx
+
+	// Use the Key slot pointed by the free list head
+	new_slot := &m.keys[m.free_list_head]
+	// We now make it point to the last slot of the data array
+	new_slot.idx = m.size
+
+	// Save the index position of the Key in the Keys array in the erase array
+	m.erase[m.size] = user_key.idx
+
+	// Update the free head list to point to the next free slot in the Key array
+	m.free_list_head = next_free_slot_idx
+
+	m.size += 1
+
+	return user_key, true
+}
+
+
+dynamic_slot_map_remove :: proc(m: ^DynamicSlotMap($T, $KeyType/Key), user_key: KeyType) -> bool {
+	if !dynamic_slot_map_is_valid(m, user_key) {
+		return false
+	}
+
+	key := &m.keys[user_key.idx]
+
+	m.size -= 1
+
+	// Overwrite the data of the deleted slot with the data from the last slot
+	m.data[key.idx] = m.data[m.size]
+	// Same for the erase array, to keep them at the same position in their respective arrays
+	m.erase[key.idx] = m.erase[m.size]
+
+
+	// Since the erase array contains the index of the correspondant Key in the Key array, we just have to change 
+	// the index of the Key pointed by the erase value to make this same Key points correctly to its moved data
+	m.keys[m.erase[key.idx]].idx = key.idx
+
+
+	// Free the key, makes it the tail of the free list
+	key.idx = user_key.idx
+	key.gen += 1
+
+	// Update the free list tail
+	m.keys[m.free_list_tail].idx = key.idx
+	m.free_list_tail = key.idx
+
+	return true
+}
+
+
+dynamic_slot_map_set :: proc(
+	m: ^DynamicSlotMap($T, $KeyType/Key),
+	user_key: KeyType,
+	data: T,
+) -> bool {
+	if !dynamic_slot_map_is_valid(m, user_key) {
+		return false
+	}
+
+	key := m.keys[user_key.idx]
+
+	m.data[key.idx] = data
+
+	return true
+}
+
+
+@(require_results)
+dynamic_slot_map_is_valid :: proc "contextless" (
+	m: ^DynamicSlotMap($T, $KT/Key),
+	user_key: KT,
+) -> bool #no_bounds_check {
+	// Manual bound checking
+	// Then check if the generation is the same
+	return(
+		!(user_key.idx >= m.capacity || user_key.idx < 0 || user_key.gen == 0) &&
+		user_key.gen == m.keys[user_key.idx].gen \
+	)
+}
+
+
+// If true it means we have to re-alloc and move the data
+@(private = "file")
+is_slot_map_full :: proc(m: ^DynamicSlotMap($K, $KeyType/Key)) -> bool {
+	return m.free_list_head == m.free_list_tail
 }
