@@ -139,7 +139,9 @@ insert_internal :: #force_inline proc(
 			delete(m.keys)
 			m.keys = new_keys
 
-			// Rebuild the free list starting from the head
+			// TODO Fix this, this does not work currently because if the head
+			// is in the middle of the keys it'll break everything
+			// Rebuild the free list starting from the head which should be
 			for i := m.free_list_head; i < new_cap; i += 1 {
 				new_keys[i].idx = i + 1
 				new_keys[i].gen = 1

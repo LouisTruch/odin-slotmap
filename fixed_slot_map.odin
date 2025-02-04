@@ -218,7 +218,6 @@ remove_internal :: #force_inline proc "contextless" (
 }
 
 
-// If the Key is valid, returns a copy of the data
 @(require_results)
 fixed_slot_map_get :: #force_inline proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $KT/Key),
@@ -231,13 +230,12 @@ fixed_slot_map_get :: #force_inline proc "contextless" (
 		return {}, false
 	}
 
-	key := &m.keys[user_key.idx]
+	key := m.keys[user_key.idx]
 
 	return m.data[key.idx], true
 }
 
 
-// If the Key is valid, returns a ptr to the data
 @(require_results)
 fixed_slot_map_get_ptr :: #force_inline proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $KT/Key),
@@ -250,7 +248,7 @@ fixed_slot_map_get_ptr :: #force_inline proc "contextless" (
 		return nil, false
 	}
 
-	key := &m.keys[user_key.idx]
+	key := m.keys[user_key.idx]
 
 	return &m.data[key.idx], true
 }
@@ -265,7 +263,7 @@ fixed_slot_map_set :: proc "contextless" (
 		return false
 	}
 
-	key := &m.keys[user_key.idx]
+	key := m.keys[user_key.idx]
 
 	m.data[key.idx] = new_data
 
@@ -273,7 +271,6 @@ fixed_slot_map_set :: proc "contextless" (
 }
 
 
-// Check if the user Key is valid
 @(require_results)
 fixed_slot_map_is_valid :: #force_inline proc "contextless" (
 	m: ^FixedSlotMap($N, $T, $KT/Key),

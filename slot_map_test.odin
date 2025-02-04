@@ -548,3 +548,9 @@ dynamic_slot_map_get_ptr_test :: proc(t: ^testing.T) {
 	testing.expect(t, ok)
 	testing.expect(t, retrieved_ptr == &slot_map.data[0])
 }
+
+
+@(test)
+dynamic_slot_map_random_ope_test :: proc(t: ^testing.T) {
+
+}
