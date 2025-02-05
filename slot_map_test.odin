@@ -395,7 +395,7 @@ dynamic_slot_map_make_test :: proc(t: ^testing.T) {
 	}
 	CoolKey :: distinct Key(uint, 32, 32)
 
-	initial_cap: uint = 5
+	initial_cap: uint : 5
 	slot_map := dynamic_slot_map_make(CoolStruct, CoolKey, initial_cap)
 	defer dynamic_slot_map_delete(&slot_map)
 
@@ -555,6 +555,7 @@ dynamic_slot_map_get_ptr_test :: proc(t: ^testing.T) {
 }
 
 
+// Very ugly
 @(test)
 dynamic_slot_map_random_ope_test :: proc(t: ^testing.T) {
 	Operation :: enum {
@@ -574,56 +575,111 @@ dynamic_slot_map_random_ope_test :: proc(t: ^testing.T) {
 			Cool,
 			NotCool,
 		},
-		x, y: f64,
+		x, y: int,
+	}
+	Tracking :: struct {
+		key:  MyKey,
+		data: MyStruct,
 	}
 	// fmt.set_user_formatters(new(map[typeid]fmt.User_Formatter))
 	// err := fmt.register_user_formatter(MyKey, formatter)
 
-	slot_map := dynamic_slot_map_make(int, MyKey, 2)
+	slot_map := dynamic_slot_map_make(MyStruct, MyKey, 2)
 	defer dynamic_slot_map_delete(&slot_map)
 
-	keys := make([dynamic]MyKey)
-	defer delete(keys)
+	tracks := make([dynamic]Tracking)
+	defer delete(tracks)
+	// keys := make([dynamic]MyKey)
+	// defer delete(keys)
 
-	TURN :: 10000
+	TURN :: 1000
 	for i in 0 ..< TURN {
 		ope := ope_random()
-		switch i {
-		case 0, 1, 2, 4:
-			ope = .Ins
-		case 3:
-			ope = .Rem
-		}
 
 		switch ope {
 		case .Ins:
-			if key, ok := dynamic_slot_map_insert(&slot_map); ok {
-				assert(ok, "Could not insert, should happen only when allocation problem")
-				append(&keys, key)
+			my_struct := MyStruct {
+				type = .Cool,
+				x    = i * 2,
+				y    = i * 3,
+			}
 
-				// Check collision, should never happen
-				for key1, i in keys {
-					for key2, j in keys {
-						if i == j {
+			if key, ok := dynamic_slot_map_insert_set(&slot_map, my_struct); ok {
+				assert(ok, "Could not insert, should happen only when allocation problem")
+
+				append(&tracks, Tracking{key, my_struct})
+
+				// Check collision, should never happen, should have used a map..
+				for tr1, j in tracks {
+					for tr2, k in tracks {
+						if j == k {
 							continue
 						}
+						key1 := tr1.key
+						key2 := tr2.key
 
 						assert(key1 != key2, "Collision 2 of the keys are the same")
 					}
 				}
 			}
 		case .Rem:
-			if len(keys) == 0 {
+			if len(tracks) == 0 {
 				continue
 			}
 
-			random_key_index := rand.int_max(max(int)) % len(keys)
-			random_key := keys[random_key_index]
-			unordered_remove(&keys, random_key_index)
+			random_key_index := rand.int_max(max(int)) % len(tracks)
+			random_key := tracks[random_key_index].key
+			unordered_remove(&tracks, random_key_index)
 
 			ok := dynamic_slot_map_remove(&slot_map, random_key)
 			assert(ok, "Failed to remove")
 		}
-		verify_free_list(slot_map)
+		testing.expect(t, len(tracks) == int(slot_map.size))
+		verify_free_list(t, slot_map)
+		verify_data_integrity(t, &slot_map, tracks)
+	}
+
+	verify_free_list :: proc(t: ^testing.T, m: DynamicSlotMap($T, $KeyType/Key)) {
+		head := m.free_list_head
+		tail := m.free_list_tail
+
+		steps: uint
+		for head != tail {
+			head = m.keys[head].idx
+
+			steps += 1
+			if steps > 10000 {
+				testing.expect(t, false, "Problem with free list")
+			}
+		}
+
+		expected_steps := m.capacity - m.size - 1 // -1 Because the tail points on itself
+		testing.expectf(
+			t,
+			steps == expected_steps,
+			"Should have taken %i steps, but did %i",
+			expected_steps,
+			steps,
+		)
+	}
+
+	verify_data_integrity :: proc(
+		t: ^testing.T,
+		m: ^DynamicSlotMap($T, $KeyType/Key),
+		tracks: [dynamic]Tracking,
+	) {
+		for tr in tracks {
+			key := tr.key
+
+			data_in_slot, ok := dynamic_slot_map_get(m, key)
+
+			testing.expectf(
+				t,
+				data_in_slot == tr.data,
+				"Data corrupted, got %v instead of %v",
+				data_in_slot,
+				tr.data,
+			)
+		}
 	}
 }

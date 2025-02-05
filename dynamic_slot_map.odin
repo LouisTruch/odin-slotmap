@@ -22,6 +22,7 @@ DynamicSlotMap :: struct($T: typeid, $KeyType: typeid) {
 }
 
 
+// TODO Add another make method with a default cap
 @(require_results)
 dynamic_slot_map_make :: #force_inline proc(
 	$T: typeid,
@@ -31,8 +32,6 @@ dynamic_slot_map_make :: #force_inline proc(
 	slot_map: DynamicSlotMap(T, KeyType),
 	ok: bool,
 ) #optional_ok {
-	assert(initial_cap > 1)
-
 	alloc_error: runtime.Allocator_Error
 
 	if slot_map.keys, alloc_error = make([]KeyType, initial_cap); alloc_error != .None {
