@@ -5,6 +5,8 @@ import "core:mem"
 
 
 // TODO Allow explicit passing of allocator ? To be able to make all the procs "contextless"
+// TODO Add another make method with a default cap
+// TODO Add return to delete() proc to see if alloc failed
 
 
 // Dynamic Dense Slot Map \
@@ -22,46 +24,84 @@ DynamicSlotMap :: struct($T: typeid, $KeyType: typeid) {
 }
 
 
-// TODO Add another make method with a default cap
 @(require_results)
 dynamic_slot_map_make :: #force_inline proc(
 	$T: typeid,
 	$KeyType: typeid,
-	initial_cap: uint,
 ) -> (
 	slot_map: DynamicSlotMap(T, KeyType),
 	ok: bool,
 ) #optional_ok {
+	DEFAULT_INITIAL_CAP :: 128
+
 	alloc_error: runtime.Allocator_Error
 
-	if slot_map.keys, alloc_error = make([]KeyType, initial_cap); alloc_error != .None {
+	if slot_map.keys, alloc_error = make([]KeyType, DEFAULT_INITIAL_CAP); alloc_error != .None {
 		return slot_map, false
 	}
-	if slot_map.data, alloc_error = make([]T, initial_cap); alloc_error != .None {
+	if slot_map.data, alloc_error = make([]T, DEFAULT_INITIAL_CAP); alloc_error != .None {
 		return slot_map, false
 	}
-	if slot_map.erase, alloc_error = make([]uint, initial_cap); alloc_error != .None {
+	if slot_map.erase, alloc_error = make([]uint, DEFAULT_INITIAL_CAP); alloc_error != .None {
 		return slot_map, false
 	}
 
-	slot_map.capacity = initial_cap
+	slot_map.capacity = DEFAULT_INITIAL_CAP
 
-	for i: uint = 0; i < initial_cap; i += 1 {
+	for i: uint = 0; i < DEFAULT_INITIAL_CAP; i += 1 {
 		slot_map.keys[i].idx = i + 1
 		slot_map.keys[i].gen = 1
 	}
 
 	slot_map.free_list_head = 0
-	slot_map.free_list_tail = initial_cap - 1
+	slot_map.free_list_tail = DEFAULT_INITIAL_CAP - 1
 
 	// Last element points on itself 
-	slot_map.keys[slot_map.free_list_tail].idx = initial_cap - 1
+	slot_map.keys[slot_map.free_list_tail].idx = DEFAULT_INITIAL_CAP - 1
 
 	return slot_map, true
 }
 
 
-// TODO Add return value to see if delete worked
+@(require_results)
+dynamic_slot_map_make_cap :: #force_inline proc(
+	$T: typeid,
+	$KeyType: typeid,
+	$INITIAL_CAP: uint,
+) -> (
+	slot_map: DynamicSlotMap(T, KeyType),
+	ok: bool,
+) where INITIAL_CAP >
+	1 #optional_ok {
+	alloc_error: runtime.Allocator_Error
+
+	if slot_map.keys, alloc_error = make([]KeyType, INITIAL_CAP); alloc_error != .None {
+		return slot_map, false
+	}
+	if slot_map.data, alloc_error = make([]T, INITIAL_CAP); alloc_error != .None {
+		return slot_map, false
+	}
+	if slot_map.erase, alloc_error = make([]uint, INITIAL_CAP); alloc_error != .None {
+		return slot_map, false
+	}
+
+	slot_map.capacity = INITIAL_CAP
+
+	for i: uint = 0; i < INITIAL_CAP; i += 1 {
+		slot_map.keys[i].idx = i + 1
+		slot_map.keys[i].gen = 1
+	}
+
+	slot_map.free_list_head = 0
+	slot_map.free_list_tail = INITIAL_CAP - 1
+
+	// Last element points on itself 
+	slot_map.keys[slot_map.free_list_tail].idx = INITIAL_CAP - 1
+
+	return slot_map, true
+}
+
+
 dynamic_slot_map_delete :: #force_inline proc(m: ^DynamicSlotMap($T, $KeyType/Key)) {
 	delete(m.keys)
 	delete(m.data)
@@ -71,7 +111,7 @@ dynamic_slot_map_delete :: #force_inline proc(m: ^DynamicSlotMap($T, $KeyType/Ke
 
 // Try and get a Slot, returning a Key to this slot \
 // This should only fails when there is an Allocation Error \
-// Operation is O(1) unless the Slot Map has to realloc \
+// Operation is O(1) unless the Slot Map has to realloc
 @(require_results)
 dynamic_slot_map_insert :: proc(
 	m: ^DynamicSlotMap($T, $KeyType/Key),

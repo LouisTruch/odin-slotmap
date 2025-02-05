@@ -395,8 +395,27 @@ dynamic_slot_map_make_test :: proc(t: ^testing.T) {
 	}
 	CoolKey :: distinct Key(uint, 32, 32)
 
+	slot_map := dynamic_slot_map_make(CoolStruct, CoolKey)
+	defer dynamic_slot_map_delete(&slot_map)
+
+	testing.expect(t, slot_map.size == 0)
+	testing.expect(t, slot_map.free_list_head == 0, "Free list head should start at 0")
+	testing.expect(t, slot_map.free_list_tail == 127, "Free list tail should be 127")
+	testing.expect(t, len(slot_map.data) == 128)
+	testing.expect(t, len(slot_map.keys) == 128)
+	testing.expect(t, len(slot_map.erase) == 128)
+}
+
+
+@(test)
+dynamic_slot_map_make_cap_test :: proc(t: ^testing.T) {
+	CoolStruct :: struct {
+		x, y: int,
+	}
+	CoolKey :: distinct Key(uint, 32, 32)
+
 	initial_cap: uint : 5
-	slot_map := dynamic_slot_map_make(CoolStruct, CoolKey, initial_cap)
+	slot_map := dynamic_slot_map_make_cap(CoolStruct, CoolKey, initial_cap)
 	defer dynamic_slot_map_delete(&slot_map)
 
 	testing.expect(t, slot_map.size == 0)
@@ -412,7 +431,7 @@ dynamic_slot_map_make_test :: proc(t: ^testing.T) {
 dynamic_slot_map_insert_test :: proc(t: ^testing.T) {
 	MyKey :: distinct Key(uint, 32, 32)
 
-	slot_map := dynamic_slot_map_make(int, MyKey, 3)
+	slot_map := dynamic_slot_map_make_cap(int, MyKey, 3)
 	defer dynamic_slot_map_delete(&slot_map)
 
 	key1, ok1 := dynamic_slot_map_insert(&slot_map)
@@ -433,7 +452,7 @@ dynamic_slot_map_insert_test :: proc(t: ^testing.T) {
 dynamic_slot_map_insert_set_test :: proc(t: ^testing.T) {
 	MyKey :: distinct Key(uint, 32, 32)
 
-	slot_map := dynamic_slot_map_make(int, MyKey, 3)
+	slot_map := dynamic_slot_map_make_cap(int, MyKey, 3)
 	defer dynamic_slot_map_delete(&slot_map)
 
 	key, ok := dynamic_slot_map_insert_set(&slot_map, 09)
@@ -446,7 +465,7 @@ dynamic_slot_map_insert_set_test :: proc(t: ^testing.T) {
 dynamic_slot_map_insert_get_ptr_test :: proc(t: ^testing.T) {
 	MyKey :: distinct Key(uint, 32, 32)
 
-	slot_map := dynamic_slot_map_make(int, MyKey, 3)
+	slot_map := dynamic_slot_map_make_cap(int, MyKey, 3)
 	defer dynamic_slot_map_delete(&slot_map)
 
 	key, ptr, _ := dynamic_slot_map_insert_get_ptr(&slot_map)
@@ -460,7 +479,7 @@ dynamic_slot_map_insert_get_ptr_test :: proc(t: ^testing.T) {
 dynamic_slot_map_is_valid_test :: proc(t: ^testing.T) {
 	MyKey :: distinct Key(uint, 32, 32)
 
-	slot_map := dynamic_slot_map_make(int, MyKey, 3)
+	slot_map := dynamic_slot_map_make_cap(int, MyKey, 3)
 	defer dynamic_slot_map_delete(&slot_map)
 
 	key1 := dynamic_slot_map_insert(&slot_map)
@@ -482,7 +501,7 @@ dynamic_slot_map_is_valid_test :: proc(t: ^testing.T) {
 dynamic_slot_map_remove_test :: proc(t: ^testing.T) {
 	MyKey :: distinct Key(uint, 32, 32)
 
-	slot_map := dynamic_slot_map_make(int, MyKey, 3)
+	slot_map := dynamic_slot_map_make_cap(int, MyKey, 3)
 	defer dynamic_slot_map_delete(&slot_map)
 
 
@@ -498,7 +517,7 @@ dynamic_slot_map_remove_test :: proc(t: ^testing.T) {
 dynamic_slot_map_remove_value_test :: proc(t: ^testing.T) {
 	MyKey :: distinct Key(uint, 32, 32)
 
-	slot_map := dynamic_slot_map_make(int, MyKey, 3)
+	slot_map := dynamic_slot_map_make_cap(int, MyKey, 3)
 	defer dynamic_slot_map_delete(&slot_map)
 
 
@@ -513,7 +532,7 @@ dynamic_slot_map_remove_value_test :: proc(t: ^testing.T) {
 dynamic_slot_map_set_test :: proc(t: ^testing.T) {
 	MyKey :: distinct Key(uint, 32, 32)
 
-	slot_map := dynamic_slot_map_make(int, MyKey, 3)
+	slot_map := dynamic_slot_map_make_cap(int, MyKey, 3)
 	defer dynamic_slot_map_delete(&slot_map)
 
 
@@ -529,7 +548,7 @@ dynamic_slot_map_set_test :: proc(t: ^testing.T) {
 dynamic_slot_map_get_test :: proc(t: ^testing.T) {
 	MyKey :: distinct Key(uint, 32, 32)
 
-	slot_map := dynamic_slot_map_make(int, MyKey, 3)
+	slot_map := dynamic_slot_map_make_cap(int, MyKey, 3)
 	defer dynamic_slot_map_delete(&slot_map)
 
 	key := dynamic_slot_map_insert_set(&slot_map, 9)
@@ -544,7 +563,7 @@ dynamic_slot_map_get_test :: proc(t: ^testing.T) {
 dynamic_slot_map_get_ptr_test :: proc(t: ^testing.T) {
 	MyKey :: distinct Key(uint, 32, 32)
 
-	slot_map := dynamic_slot_map_make(int, MyKey, 3)
+	slot_map := dynamic_slot_map_make_cap(int, MyKey, 3)
 	defer dynamic_slot_map_delete(&slot_map)
 
 	key := dynamic_slot_map_insert_set(&slot_map, 9)
@@ -584,7 +603,7 @@ dynamic_slot_map_random_ope_test :: proc(t: ^testing.T) {
 	// fmt.set_user_formatters(new(map[typeid]fmt.User_Formatter))
 	// err := fmt.register_user_formatter(MyKey, formatter)
 
-	slot_map := dynamic_slot_map_make(MyStruct, MyKey, 2)
+	slot_map := dynamic_slot_map_make_cap(MyStruct, MyKey, 2)
 	defer dynamic_slot_map_delete(&slot_map)
 
 	tracks := make([dynamic]Tracking)
