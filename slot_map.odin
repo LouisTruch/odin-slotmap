@@ -1,5 +1,9 @@
 package slot_map
 
+// TODO Test when passing Key(u16/u32, x, y) to slot maps
+// TODO Allow explicit passing of allocator to dynamic_slot_map ? To be able to make all the procs "contextless"
+// TODO Add return to dynamic_slot_map_delete() proc to see if alloc failed
+
 // Proc groups
 
 insert :: proc {

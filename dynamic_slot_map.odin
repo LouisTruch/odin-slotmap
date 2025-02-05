@@ -4,11 +4,6 @@ import "base:runtime"
 import "core:mem"
 
 
-// TODO Allow explicit passing of allocator ? To be able to make all the procs "contextless"
-// TODO Add another make method with a default cap
-// TODO Add return to delete() proc to see if alloc failed
-
-
 // Dynamic Dense Slot Map \
 // Its internal arrays are always on the heap \
 // It can only grow and never shrinks \
