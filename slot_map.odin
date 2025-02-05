@@ -1,5 +1,7 @@
 package slot_map
 
+// Both Slot Maps should be usable right now, but only with Key(uint, x, y)
+
 // TODO Test when passing Key(u16/u32, x, y) to slot maps
 // TODO Allow explicit passing of allocator to dynamic_slot_map ? To be able to make all the procs "contextless"
 // TODO Add return to dynamic_slot_map_delete() proc to see if alloc failed
