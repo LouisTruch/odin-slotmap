@@ -31,6 +31,8 @@ dynamic_slot_map_make :: #force_inline proc(
 	slot_map: DynamicSlotMap(T, KeyType),
 	ok: bool,
 ) #optional_ok {
+	assert(initial_cap > 1)
+
 	alloc_error: runtime.Allocator_Error
 
 	if slot_map.keys, alloc_error = make([]KeyType, initial_cap); alloc_error != .None {
@@ -124,49 +126,7 @@ insert_internal :: #force_inline proc(
 	KeyType,
 	bool,
 ) {
-	// Means we have only 1 slot left and it will be taken after this call
-	// It's our condition to re-alloc bigger arrays
-	if m.free_list_head == m.free_list_tail {
-		// Move the arrays
-		current_cap := int(m.capacity)
-		new_cap := uint(f64(current_cap) * growth_factor)
-		m.capacity = new_cap
-
-		if new_keys, error := make([]KeyType, uint(new_cap)); error != .None {
-			return KeyType{}, false
-		} else {
-			mem.copy(&new_keys[0], &m.keys[0], current_cap * size_of(KeyType))
-			delete(m.keys)
-			m.keys = new_keys
-
-			// TODO Fix this, this does not work currently because if the head
-			// is in the middle of the keys it'll break everything
-			// Rebuild the free list starting from the head which should be
-			for i := m.free_list_head; i < new_cap; i += 1 {
-				new_keys[i].idx = i + 1
-				new_keys[i].gen = 1
-			}
-
-			m.free_list_tail = new_cap - 1
-			m.keys[m.free_list_tail].idx = new_cap - 1
-		}
-
-		if new_data, error := make([]T, uint(new_cap)); error != .None {
-			return KeyType{}, false
-		} else {
-			mem.copy(&new_data[0], &m.data[0], current_cap * size_of(T))
-			delete(m.data)
-			m.data = new_data
-		}
-
-		if new_erase, error := make([]uint, uint(new_cap)); error != .None {
-			return KeyType{}, false
-		} else {
-			mem.copy(&new_erase[0], &m.erase[0], current_cap * size_of(uint))
-			delete(m.erase)
-			m.erase = new_erase
-		}
-	}
+	assert(growth_factor > 1, "Dynamic Slot Map insert: Growth factor must be > 1.0")
 
 	// Generate the user Key
 	// It points to its associated Key in the Key array and has the same gen
@@ -190,6 +150,53 @@ insert_internal :: #force_inline proc(
 	m.free_list_head = next_free_slot_idx
 
 	m.size += 1
+
+	// Means we have only 1 free Slot left
+	// It's our condition to re-alloc bigger arrays and move everything
+	if m.free_list_head == m.free_list_tail {
+		current_cap := m.capacity
+		new_cap := uint(growth_factor * f64(m.capacity))
+		// Ensure we are growing by at least 1
+		if current_cap == new_cap {
+			new_cap += 1
+		}
+		m.capacity = new_cap
+
+		if new_keys, error := make([]KeyType, uint(new_cap)); error != .None {
+			return KeyType{}, false
+		} else {
+			mem.copy(&new_keys[0], &m.keys[0], int(current_cap) * size_of(KeyType))
+			delete(m.keys)
+			m.keys = new_keys
+
+			// m.free_list_head = current_cap
+			m.free_list_tail = new_cap - 1
+
+			for i := current_cap; i < new_cap; i += 1 {
+				m.keys[i].idx = i + 1
+				m.keys[i].gen = 1
+			}
+
+			m.keys[m.free_list_head].idx = current_cap
+			m.keys[m.free_list_tail].idx = new_cap - 1
+		}
+
+		if new_data, error := make([]T, uint(new_cap)); error != .None {
+			return KeyType{}, false
+		} else {
+			mem.copy(&new_data[0], &m.data[0], int(current_cap) * size_of(T))
+			delete(m.data)
+			m.data = new_data
+		}
+
+		if new_erase, error := make([]uint, uint(new_cap)); error != .None {
+			return KeyType{}, false
+		} else {
+			mem.copy(&new_erase[0], &m.erase[0], int(current_cap) * size_of(uint))
+			delete(m.erase)
+			m.erase = new_erase
+		}
+	}
 
 	return user_key, true
 }

@@ -335,14 +335,14 @@ fixed_slot_map_random_insert_remove_test :: proc(t: ^testing.T) {
 		Ins,
 		Del,
 	}
-	random_ope :: proc() -> Operation {
+	ope_random :: proc() -> Operation {
 		opes := [2]Operation{.Ins, .Del}
 		return rand.choice(opes[:])
 	}
 
 	TURNS :: 1000
 	for _ in 0 ..< TURNS {
-		ope := random_ope()
+		ope := ope_random()
 
 		switch ope {
 		case .Ins:
@@ -419,8 +419,13 @@ dynamic_slot_map_insert_test :: proc(t: ^testing.T) {
 	testing.expect(t, ok1, "Could not create a insert Key")
 
 	key2 := dynamic_slot_map_insert(&slot_map)
-	key3 := dynamic_slot_map_insert(&slot_map, growth_factor = 2)
-	testing.expect(t, len(slot_map.keys) == 6, "Did not re alloc properly")
+	key3 := dynamic_slot_map_insert(&slot_map)
+	testing.expectf(
+		t,
+		len(slot_map.keys) == 6,
+		"Did not re alloc properly len should be 6 got:%i",
+		len(slot_map.keys),
+	)
 }
 
 
@@ -552,5 +557,73 @@ dynamic_slot_map_get_ptr_test :: proc(t: ^testing.T) {
 
 @(test)
 dynamic_slot_map_random_ope_test :: proc(t: ^testing.T) {
+	Operation :: enum {
+		Ins,
+		Rem,
+	}
 
+	ope_random :: proc() -> Operation {
+		opes := [2]Operation{.Ins, .Rem}
+		return rand.choice(opes[:])
+	}
+
+	MyKey :: distinct Key(uint, 32, 32)
+	MyStruct :: struct {
+		type: enum {
+			None,
+			Cool,
+			NotCool,
+		},
+		x, y: f64,
+	}
+	// fmt.set_user_formatters(new(map[typeid]fmt.User_Formatter))
+	// err := fmt.register_user_formatter(MyKey, formatter)
+
+	slot_map := dynamic_slot_map_make(int, MyKey, 2)
+	defer dynamic_slot_map_delete(&slot_map)
+
+	keys := make([dynamic]MyKey)
+	defer delete(keys)
+
+	TURN :: 10000
+	for i in 0 ..< TURN {
+		ope := ope_random()
+		switch i {
+		case 0, 1, 2, 4:
+			ope = .Ins
+		case 3:
+			ope = .Rem
+		}
+
+		switch ope {
+		case .Ins:
+			if key, ok := dynamic_slot_map_insert(&slot_map); ok {
+				assert(ok, "Could not insert, should happen only when allocation problem")
+				append(&keys, key)
+
+				// Check collision, should never happen
+				for key1, i in keys {
+					for key2, j in keys {
+						if i == j {
+							continue
+						}
+
+						assert(key1 != key2, "Collision 2 of the keys are the same")
+					}
+				}
+			}
+		case .Rem:
+			if len(keys) == 0 {
+				continue
+			}
+
+			random_key_index := rand.int_max(max(int)) % len(keys)
+			random_key := keys[random_key_index]
+			unordered_remove(&keys, random_key_index)
+
+			ok := dynamic_slot_map_remove(&slot_map, random_key)
+			assert(ok, "Failed to remove")
+		}
+		verify_free_list(slot_map)
+	}
 }
